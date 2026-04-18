@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Flask, jsonify, request
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from openai import OpenAI
 
 app = Flask(__name__)
 
@@ -18,6 +19,7 @@ def add_cors_headers(response):
 @app.route("/tasks", methods=["OPTIONS"])
 @app.route("/tasks/<int:task_id>", methods=["OPTIONS"])
 @app.route("/init-db", methods=["OPTIONS"])
+@app.route("/ai", methods=["OPTIONS"])
 def options_handler(task_id=None):
     return ("", 204)
 
@@ -27,6 +29,13 @@ def get_connection():
     if not database_url:
         raise ValueError("DATABASE_URL is not set")
     return psycopg2.connect(database_url)
+
+
+def get_openai_client():
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY is not set")
+    return OpenAI(api_key=api_key)
 
 
 def serialize_task(task):
@@ -91,6 +100,30 @@ def ensure_tasks_schema():
     conn.commit()
     cur.close()
     conn.close()
+
+
+def generate_ai_reply(user_message):
+    client = get_openai_client()
+
+    response = client.responses.create(
+        model="gpt-5.4",
+        input=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a personal productivity assistant. "
+                    "Help the user manage tasks, prioritize work, plan the day, "
+                    "and give short, practical advice."
+                ),
+            },
+            {
+                "role": "user",
+                "content": user_message,
+            },
+        ],
+    )
+
+    return response.output_text
 
 
 @app.route("/")
@@ -413,6 +446,62 @@ def quick_add():
             "task": serialize_task(dict(task))
         })
 
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/ai", methods=["POST"])
+def ai_chat():
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body must be JSON"
+            }), 400
+
+        message = data.get("message")
+
+        if not message or not str(message).strip():
+            return jsonify({
+                "status": "error",
+                "message": "Message is required"
+            }), 400
+
+        reply = generate_ai_reply(message.strip())
+
+        return jsonify({
+            "status": "success",
+            "reply": reply
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/ai-browser")
+def ai_browser():
+    try:
+        message = request.args.get("message", "").strip()
+
+        if not message:
+            return jsonify({
+                "status": "error",
+                "message": "message query parameter is required"
+            }), 400
+
+        reply = generate_ai_reply(message)
+
+        return jsonify({
+            "status": "success",
+            "reply": reply
+        })
     except Exception as e:
         return jsonify({
             "status": "error",
