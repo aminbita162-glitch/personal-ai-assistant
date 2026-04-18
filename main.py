@@ -20,6 +20,8 @@ def add_cors_headers(response):
 @app.route("/tasks/<int:task_id>", methods=["OPTIONS"])
 @app.route("/init-db", methods=["OPTIONS"])
 @app.route("/ai", methods=["OPTIONS"])
+@app.route("/ai-browser", methods=["OPTIONS"])
+@app.route("/quick-add", methods=["OPTIONS"])
 def options_handler(task_id=None):
     return ("", 204)
 
@@ -102,7 +104,25 @@ def ensure_tasks_schema():
     conn.close()
 
 
-# ✅ FIXED AI FUNCTION
+def clean_ai_text(text):
+    if not text:
+        return "Sorry, I could not generate a response."
+
+    cleaned = str(text)
+
+    cleaned = cleaned.replace("\\n", "\n")
+    cleaned = cleaned.replace("\\t", "\t")
+    cleaned = cleaned.replace("\\r", "")
+    cleaned = cleaned.replace("\\u2014", "—")
+    cleaned = cleaned.replace("\\u2013", "–")
+    cleaned = cleaned.replace("\\u2018", "‘")
+    cleaned = cleaned.replace("\\u2019", "’")
+    cleaned = cleaned.replace("\\u201c", "“")
+    cleaned = cleaned.replace("\\u201d", "”")
+
+    return cleaned.strip()
+
+
 def generate_ai_reply(user_message):
     client = get_openai_client()
 
@@ -111,14 +131,30 @@ def generate_ai_reply(user_message):
         input=f"You are a helpful productivity assistant.\nUser: {user_message}"
     )
 
-    # safer extraction
+    text = None
+
     try:
-        return response.output_text.strip()
+        text = response.output_text
     except Exception:
+        text = None
+
+    if not text:
         try:
-            return response.output[0].content[0].text.strip()
+            output_items = getattr(response, "output", [])
+            collected = []
+
+            for item in output_items:
+                contents = getattr(item, "content", [])
+                for content in contents:
+                    if getattr(content, "type", "") == "output_text":
+                        collected.append(getattr(content, "text", ""))
+
+            if collected:
+                text = "\n".join(part for part in collected if part)
         except Exception:
-            return "Sorry, I could not generate a response."
+            text = None
+
+    return clean_ai_text(text)
 
 
 @app.route("/")
@@ -295,7 +331,19 @@ def ai_chat():
     try:
         data = request.get_json()
 
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body must be JSON"
+            }), 400
+
         message = data.get("message")
+
+        if not message or not str(message).strip():
+            return jsonify({
+                "status": "error",
+                "message": "Message is required"
+            }), 400
 
         reply = generate_ai_reply(message.strip())
 
@@ -314,6 +362,12 @@ def ai_chat():
 def ai_browser():
     try:
         message = request.args.get("message", "").strip()
+
+        if not message:
+            return jsonify({
+                "status": "error",
+                "message": "message query parameter is required"
+            }), 400
 
         reply = generate_ai_reply(message)
 
