@@ -382,3 +382,39 @@ def delete_task(task_id):
             "status": "error",
             "message": str(e)
         }), 500
+
+
+@app.route("/quick-add")
+def quick_add():
+    try:
+        ensure_tasks_schema()
+
+        title = request.args.get("title", "Quick Task")
+
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            INSERT INTO tasks (title)
+            VALUES (%s)
+            RETURNING id, title, description, status, priority, due_date, created_at;
+            """,
+            (title,)
+        )
+
+        task = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return jsonify({
+            "status": "success",
+            "task": serialize_task(dict(task))
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
