@@ -25,6 +25,8 @@ def add_cors_headers(response):
 @app.route("/quick-add", methods=["OPTIONS"])
 @app.route("/ai-to-task", methods=["OPTIONS"])
 @app.route("/ai-to-task-browser", methods=["OPTIONS"])
+@app.route("/smart-ai", methods=["OPTIONS"])
+@app.route("/smart-ai-browser", methods=["OPTIONS"])
 def options_handler(task_id=None):
     return ("", 204)
 
@@ -224,6 +226,93 @@ User message:
         "description": description,
         "priority": priority,
         "status": status
+    }
+
+
+def decide_smart_action(user_message):
+    client = get_openai_client()
+
+    prompt = f"""
+You are a smart personal productivity assistant.
+
+Your job is to decide whether the user's message should:
+1. create a task
+2. or receive a normal assistant reply
+
+Return ONLY valid JSON in this exact format:
+{{
+  "action": "task" or "reply",
+  "title": "",
+  "description": "",
+  "priority": "low or medium or high",
+  "status": "pending",
+  "reply": ""
+}}
+
+Rules:
+- Return only JSON.
+- If the user is asking to remember, do, add, remind, schedule, track, or note an actionable item, choose "task".
+- If the user is asking for advice, planning, explanation, or conversation, choose "reply".
+- If action is "task":
+  - fill title
+  - description can be empty
+  - priority must be low, medium, or high
+  - status must be pending
+  - reply should be empty
+- If action is "reply":
+  - fill reply
+  - title and description should be empty
+  - priority should be medium
+  - status should be pending
+- Do not add markdown.
+- Do not add explanation outside JSON.
+
+User message:
+{user_message}
+"""
+
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt
+    )
+
+    raw_text = get_response_text(response)
+    cleaned = clean_ai_text(raw_text)
+
+    try:
+        parsed = json.loads(cleaned)
+    except Exception:
+        raise ValueError("AI did not return valid JSON")
+
+    action = str(parsed.get("action", "reply")).strip().lower()
+    title = str(parsed.get("title", "")).strip()
+    description = str(parsed.get("description", "")).strip()
+    priority = str(parsed.get("priority", "medium")).strip().lower()
+    status = str(parsed.get("status", "pending")).strip().lower()
+    reply = str(parsed.get("reply", "")).strip()
+
+    if action not in ["task", "reply"]:
+        action = "reply"
+
+    if priority not in ["low", "medium", "high"]:
+        priority = "medium"
+
+    if status not in ["pending", "done"]:
+        status = "pending"
+
+    if action == "task" and not title:
+        raise ValueError("AI decided task but did not return a title")
+
+    if action == "reply" and not reply:
+        reply = generate_ai_reply(user_message)
+
+    return {
+        "action": action,
+        "title": title,
+        "description": description,
+        "priority": priority,
+        "status": status,
+        "reply": reply
     }
 
 
@@ -516,6 +605,96 @@ def ai_to_task_browser():
             "status": "success",
             "message": "Task created from AI",
             "task": task
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/smart-ai", methods=["POST"])
+def smart_ai():
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body must be JSON"
+            }), 400
+
+        message = data.get("message")
+
+        if not message or not str(message).strip():
+            return jsonify({
+                "status": "error",
+                "message": "Message is required"
+            }), 400
+
+        decision = decide_smart_action(message.strip())
+
+        if decision["action"] == "task":
+            task = insert_task(
+                title=decision["title"],
+                description=decision["description"],
+                status=decision["status"],
+                priority=decision["priority"],
+                due_date=None
+            )
+
+            return jsonify({
+                "status": "success",
+                "action": "task",
+                "message": "Task created from Smart AI",
+                "task": task
+            })
+
+        return jsonify({
+            "status": "success",
+            "action": "reply",
+            "reply": decision["reply"]
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/smart-ai-browser")
+def smart_ai_browser():
+    try:
+        message = request.args.get("message", "").strip()
+
+        if not message:
+            return jsonify({
+                "status": "error",
+                "message": "message query parameter is required"
+            }), 400
+
+        decision = decide_smart_action(message)
+
+        if decision["action"] == "task":
+            task = insert_task(
+                title=decision["title"],
+                description=decision["description"],
+                status=decision["status"],
+                priority=decision["priority"],
+                due_date=None
+            )
+
+            return jsonify({
+                "status": "success",
+                "action": "task",
+                "message": "Task created from Smart AI",
+                "task": task
+            })
+
+        return jsonify({
+            "status": "success",
+            "action": "reply",
+            "reply": decision["reply"]
         })
     except Exception as e:
         return jsonify({
