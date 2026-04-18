@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 from flask import Flask, jsonify, request
 import psycopg2
@@ -22,6 +23,8 @@ def add_cors_headers(response):
 @app.route("/ai", methods=["OPTIONS"])
 @app.route("/ai-browser", methods=["OPTIONS"])
 @app.route("/quick-add", methods=["OPTIONS"])
+@app.route("/ai-to-task", methods=["OPTIONS"])
+@app.route("/ai-to-task-browser", methods=["OPTIONS"])
 def options_handler(task_id=None):
     return ("", 204)
 
@@ -109,7 +112,6 @@ def clean_ai_text(text):
         return "Sorry, I could not generate a response."
 
     cleaned = str(text)
-
     cleaned = cleaned.replace("\\n", "\n")
     cleaned = cleaned.replace("\\t", "\t")
     cleaned = cleaned.replace("\\r", "")
@@ -123,14 +125,7 @@ def clean_ai_text(text):
     return cleaned.strip()
 
 
-def generate_ai_reply(user_message):
-    client = get_openai_client()
-
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=f"You are a helpful productivity assistant.\nUser: {user_message}"
-    )
-
+def get_response_text(response):
     text = None
 
     try:
@@ -154,7 +149,105 @@ def generate_ai_reply(user_message):
         except Exception:
             text = None
 
-    return clean_ai_text(text)
+    return text
+
+
+def generate_ai_reply(user_message):
+    client = get_openai_client()
+
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=f"You are a helpful productivity assistant.\nUser: {user_message}"
+    )
+
+    return clean_ai_text(get_response_text(response))
+
+
+def extract_task_from_message(user_message):
+    client = get_openai_client()
+
+    prompt = f"""
+You are a task extraction assistant.
+
+Read the user's message and extract one actionable task.
+
+Return ONLY valid JSON in this exact format:
+{{
+  "title": "task title",
+  "description": "short optional description or empty string",
+  "priority": "low or medium or high",
+  "status": "pending"
+}}
+
+Rules:
+- Return only JSON.
+- Keep the title short and clear.
+- status must always be "pending".
+- priority must be one of: low, medium, high.
+- If description is not needed, return an empty string.
+- Do not add markdown.
+- Do not add explanation.
+
+User message:
+{user_message}
+"""
+
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt
+    )
+
+    raw_text = get_response_text(response)
+    cleaned = clean_ai_text(raw_text)
+
+    try:
+        parsed = json.loads(cleaned)
+    except Exception:
+        raise ValueError("AI did not return valid JSON")
+
+    title = str(parsed.get("title", "")).strip()
+    description = str(parsed.get("description", "")).strip()
+    priority = str(parsed.get("priority", "medium")).strip().lower()
+    status = str(parsed.get("status", "pending")).strip().lower()
+
+    if not title:
+        raise ValueError("AI did not return a task title")
+
+    if priority not in ["low", "medium", "high"]:
+        priority = "medium"
+
+    if status not in ["pending", "done"]:
+        status = "pending"
+
+    return {
+        "title": title,
+        "description": description,
+        "priority": priority,
+        "status": status
+    }
+
+
+def insert_task(title, description="", status="pending", priority="medium", due_date=None):
+    ensure_tasks_schema()
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute(
+        """
+        INSERT INTO tasks (title, description, status, priority, due_date)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING id, title, description, status, priority, due_date, created_at;
+        """,
+        (title, description, status, priority, due_date)
+    )
+
+    task = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return serialize_task(dict(task))
 
 
 @app.route("/")
@@ -264,24 +357,17 @@ def create_task():
                 "message": "Title is required"
             }), 400
 
-        conn = get_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute(
-            """
-            INSERT INTO tasks (title, description, status, priority, due_date)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id, title, description, status, priority, due_date, created_at;
-            """,
-            (title.strip(), description, status, priority, due_date)
+        task = insert_task(
+            title=title.strip(),
+            description=description,
+            status=status,
+            priority=priority,
+            due_date=due_date
         )
-        task = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
 
         return jsonify({
             "status": "success",
-            "task": serialize_task(dict(task))
+            "task": task
         }), 201
     except Exception as e:
         return jsonify({
@@ -293,32 +379,14 @@ def create_task():
 @app.route("/quick-add")
 def quick_add():
     try:
-        ensure_tasks_schema()
+        title = request.args.get("title", "Quick Task").strip()
 
-        title = request.args.get("title", "Quick Task")
-
-        conn = get_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        cur.execute(
-            """
-            INSERT INTO tasks (title)
-            VALUES (%s)
-            RETURNING id, title, description, status, priority, due_date, created_at;
-            """,
-            (title,)
-        )
-
-        task = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
+        task = insert_task(title=title)
 
         return jsonify({
             "status": "success",
-            "task": serialize_task(dict(task))
+            "task": task
         })
-
     except Exception as e:
         return jsonify({
             "status": "error",
@@ -345,7 +413,7 @@ def ai_chat():
                 "message": "Message is required"
             }), 400
 
-        reply = generate_ai_reply(message.strip())
+        reply = generate_ai_reply(message)
 
         return jsonify({
             "status": "success",
@@ -374,6 +442,80 @@ def ai_browser():
         return jsonify({
             "status": "success",
             "reply": reply
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/ai-to-task", methods=["POST"])
+def ai_to_task():
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body must be JSON"
+            }), 400
+
+        message = data.get("message")
+
+        if not message or not str(message).strip():
+            return jsonify({
+                "status": "error",
+                "message": "Message is required"
+            }), 400
+
+        extracted_task = extract_task_from_message(message.strip())
+
+        task = insert_task(
+            title=extracted_task["title"],
+            description=extracted_task["description"],
+            status=extracted_task["status"],
+            priority=extracted_task["priority"],
+            due_date=None
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "Task created from AI",
+            "task": task
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/ai-to-task-browser")
+def ai_to_task_browser():
+    try:
+        message = request.args.get("message", "").strip()
+
+        if not message:
+            return jsonify({
+                "status": "error",
+                "message": "message query parameter is required"
+            }), 400
+
+        extracted_task = extract_task_from_message(message)
+
+        task = insert_task(
+            title=extracted_task["title"],
+            description=extracted_task["description"],
+            status=extracted_task["status"],
+            priority=extracted_task["priority"],
+            due_date=None
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": "Task created from AI",
+            "task": task
         })
     except Exception as e:
         return jsonify({
