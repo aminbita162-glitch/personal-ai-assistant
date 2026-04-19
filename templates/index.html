@@ -226,6 +226,46 @@
             color: #6b7280;
             margin-top: 8px;
         }
+
+        .task-actions {
+            margin-top: 14px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .action-button {
+            margin-top: 0;
+            padding: 10px 14px;
+            font-size: 14px;
+            border-radius: 10px;
+        }
+
+        .done-button {
+            background: #059669;
+        }
+
+        .done-button:hover {
+            background: #047857;
+        }
+
+        .pending-button {
+            background: #d97706;
+        }
+
+        .pending-button:hover {
+            background: #b45309;
+        }
+
+        .done-task {
+            opacity: 0.85;
+            background: #f0fdf4;
+        }
+
+        .done-task .task-item-title {
+            text-decoration: line-through;
+            color: #166534;
+        }
     </style>
 </head>
 <body>
@@ -320,6 +360,36 @@
             resultBox.textContent = JSON.stringify(data, null, 2);
         }
 
+        async function updateTaskStatus(taskId, newStatus) {
+            statusText.textContent = "Updating task...";
+
+            try {
+                const response = await fetch(`/tasks/${taskId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        status: newStatus
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || data.status === "error") {
+                    renderError(data.message || "Could not update task.");
+                    statusText.textContent = "Error";
+                    return;
+                }
+
+                statusText.textContent = "Task updated";
+                await loadTasks();
+            } catch (error) {
+                renderError("Request failed: " + error.message);
+                statusText.textContent = "Error";
+            }
+        }
+
         function renderTasks(tasks) {
             if (!Array.isArray(tasks) || tasks.length === 0) {
                 tasksList.innerHTML = `
@@ -334,9 +404,10 @@
             tasksList.innerHTML = tasks.map(task => {
                 const description = task.description ? escapeHtml(task.description) : "No description";
                 const createdAt = task.created_at ? escapeHtml(task.created_at) : "Unknown";
+                const doneClass = task.status === "done" ? "done-task" : "";
 
                 return `
-                    <div class="task-item">
+                    <div class="task-item ${doneClass}">
                         <div class="task-item-title">${escapeHtml(task.title)}</div>
                         <div class="task-item-description">${description}</div>
                         <div class="task-row"><strong>Task ID:</strong> ${escapeHtml(task.id)}</div>
@@ -344,6 +415,10 @@
                         <div>
                             <span class="badge badge-priority">Priority: ${escapeHtml(task.priority)}</span>
                             <span class="badge badge-status">Status: ${escapeHtml(task.status)}</span>
+                        </div>
+                        <div class="task-actions">
+                            <button class="action-button done-button" onclick="updateTaskStatus(${task.id}, 'done')">Mark as Done</button>
+                            <button class="action-button pending-button" onclick="updateTaskStatus(${task.id}, 'pending')">Mark as Pending</button>
                         </div>
                     </div>
                 `;
