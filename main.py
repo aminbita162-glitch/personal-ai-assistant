@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from openai import OpenAI
@@ -341,9 +341,7 @@ def insert_task(title, description="", status="pending", priority="medium", due_
 
 @app.route("/")
 def home():
-    return jsonify({
-        "message": "Personal AI Assistant backend is live"
-    })
+    return render_template("index.html")
 
 
 @app.route("/health")
