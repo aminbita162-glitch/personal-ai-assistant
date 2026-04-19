@@ -62,75 +62,21 @@
             cursor: pointer;
         }
 
-        button:hover {
-            background: #1f2937;
+        .task-actions button {
+            margin-right: 8px;
+            margin-top: 10px;
         }
 
-        .result-box {
-            margin-top: 24px;
-            padding: 16px;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            white-space: pre-wrap;
-            word-break: break-word;
+        .done-btn {
+            background: #059669;
         }
 
-        .status {
-            margin-top: 12px;
-            font-size: 14px;
-            color: #6b7280;
+        .pending-btn {
+            background: #d97706;
         }
 
-        .section-title {
-            margin-top: 28px;
-            margin-bottom: 10px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        .example-list {
-            margin: 0;
-            padding-left: 18px;
-            color: #374151;
-        }
-
-        .example-list li {
-            margin-bottom: 8px;
-        }
-
-        .reply-card {
-            background: #eef6ff;
-            border: 1px solid #bfdbfe;
-            border-radius: 12px;
-            padding: 16px;
-            color: #1e3a8a;
-        }
-
-        .task-card {
-            background: #ecfdf5;
-            border: 1px solid #a7f3d0;
-            border-radius: 12px;
-            padding: 16px;
-        }
-
-        .task-card h3 {
-            margin-top: 0;
-            margin-bottom: 12px;
-            color: #065f46;
-        }
-
-        .task-row {
-            margin-bottom: 8px;
-            color: #064e3b;
-        }
-
-        .error-card {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            border-radius: 12px;
-            padding: 16px;
-            color: #991b1b;
+        .delete-btn {
+            background: #dc2626;
         }
 
         .badge {
@@ -153,46 +99,6 @@
             color: #1d4ed8;
         }
 
-        .muted {
-            color: #6b7280;
-            font-size: 14px;
-            margin-top: 8px;
-        }
-
-        .loading {
-            color: #92400e;
-            background: #fffbeb;
-            border: 1px solid #fde68a;
-            border-radius: 12px;
-            padding: 16px;
-        }
-
-        .tasks-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 28px;
-            margin-bottom: 10px;
-        }
-
-        .refresh-button {
-            margin-top: 0;
-            background: #2563eb;
-            padding: 10px 14px;
-            font-size: 14px;
-        }
-
-        .refresh-button:hover {
-            background: #1d4ed8;
-        }
-
-        .task-list {
-            display: grid;
-            gap: 14px;
-        }
-
         .task-item {
             border: 1px solid #e5e7eb;
             border-radius: 12px;
@@ -200,319 +106,116 @@
             background: #ffffff;
         }
 
-        .task-item-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 8px;
-            color: #111827;
-        }
-
-        .task-item-description {
-            color: #4b5563;
-            margin-bottom: 10px;
-            white-space: pre-wrap;
-        }
-
-        .empty-state {
-            background: #f9fafb;
-            border: 1px dashed #d1d5db;
-            border-radius: 12px;
-            padding: 16px;
-            color: #6b7280;
-        }
-
-        .small-note {
-            font-size: 13px;
-            color: #6b7280;
-            margin-top: 8px;
-        }
-
-        .task-actions {
-            margin-top: 14px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .action-button {
-            margin-top: 0;
-            padding: 10px 14px;
-            font-size: 14px;
-            border-radius: 10px;
-        }
-
-        .done-button {
-            background: #059669;
-        }
-
-        .done-button:hover {
-            background: #047857;
-        }
-
-        .pending-button {
-            background: #d97706;
-        }
-
-        .pending-button:hover {
-            background: #b45309;
-        }
-
-        .done-task {
-            opacity: 0.85;
-            background: #f0fdf4;
-        }
-
-        .done-task .task-item-title {
+        .task-done {
+            background: #ecfdf5;
             text-decoration: line-through;
-            color: #166534;
+        }
+
+        .task-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .loading {
+            padding: 16px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Personal AI Assistant</h1>
-        <p>Talk to your assistant and let it reply or create a task automatically.</p>
+<div class="container">
+    <h1>Personal AI Assistant</h1>
+    <p>Talk to your assistant and let it reply or create a task automatically.</p>
 
-        <label for="messageInput" class="label">Your message</label>
-        <textarea id="messageInput" placeholder="Example: buy milk tomorrow"></textarea>
+    <label>Your message</label>
+    <textarea id="messageInput"></textarea>
 
-        <button id="sendButton">Send</button>
+    <button onclick="sendMessage()">Send</button>
 
-        <div class="status" id="statusText">Ready</div>
+    <div id="statusText">Ready</div>
 
-        <div class="section-title">Result</div>
-        <div class="result-box" id="resultBox">No result yet.</div>
+    <h3>Result</h3>
+    <div id="resultBox">No result yet.</div>
 
-        <div class="tasks-header">
-            <div class="section-title" style="margin: 0;">Tasks List</div>
-            <button id="refreshTasksButton" class="refresh-button">Refresh Tasks</button>
-        </div>
-
-        <div id="tasksList" class="task-list">
-            <div class="loading">Loading tasks...</div>
-        </div>
-
-        <div class="section-title">Examples</div>
-        <ul class="example-list">
-            <li>buy milk tomorrow</li>
-            <li>call doctor this evening</li>
-            <li>plan my day</li>
-            <li>what should I do today?</li>
-        </ul>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;">
+        <h3>Tasks List</h3>
+        <button onclick="loadTasks()">Refresh Tasks</button>
     </div>
 
-    <script>
-        const sendButton = document.getElementById("sendButton");
-        const refreshTasksButton = document.getElementById("refreshTasksButton");
-        const messageInput = document.getElementById("messageInput");
-        const resultBox = document.getElementById("resultBox");
-        const statusText = document.getElementById("statusText");
-        const tasksList = document.getElementById("tasksList");
+    <div id="tasksList" class="task-list">
+        <div class="loading">Loading tasks...</div>
+    </div>
+</div>
 
-        function escapeHtml(value) {
-            return String(value)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
+<script>
+const resultBox = document.getElementById("resultBox");
+const statusText = document.getElementById("statusText");
+const tasksList = document.getElementById("tasksList");
 
-        function renderReply(reply) {
-            resultBox.innerHTML = `
-                <div class="reply-card">
-                    <strong>AI Reply</strong>
-                    <div style="margin-top: 10px;">${escapeHtml(reply).replace(/\n/g, "<br>")}</div>
-                </div>
-            `;
-        }
+function renderTasks(tasks) {
+    tasksList.innerHTML = tasks.map(task => {
+        return `
+        <div class="task-item ${task.status === 'done' ? 'task-done' : ''}">
+            <strong>${task.title}</strong><br>
+            ${task.description || "No description"}<br>
+            Task ID: ${task.id}<br>
+            Created at: ${task.created_at}<br>
 
-        function renderTask(task, message) {
-            const description = task.description ? escapeHtml(task.description) : "No description";
-            const createdAt = task.created_at ? escapeHtml(task.created_at) : "Unknown";
+            <span class="badge badge-priority">Priority: ${task.priority}</span>
+            <span class="badge badge-status">Status: ${task.status}</span>
 
-            resultBox.innerHTML = `
-                <div class="task-card">
-                    <h3>✅ Task created</h3>
-                    <div class="task-row"><strong>Title:</strong> ${escapeHtml(task.title)}</div>
-                    <div class="task-row"><strong>Description:</strong> ${description}</div>
-                    <div class="task-row"><strong>Task ID:</strong> ${escapeHtml(task.id)}</div>
-                    <div class="task-row"><strong>Created at:</strong> ${createdAt}</div>
-                    <div>
-                        <span class="badge badge-priority">Priority: ${escapeHtml(task.priority)}</span>
-                        <span class="badge badge-status">Status: ${escapeHtml(task.status)}</span>
-                    </div>
-                    <div class="muted">Source message: ${escapeHtml(message)}</div>
-                </div>
-            `;
-        }
+            <div class="task-actions">
+                <button class="done-btn" onclick="updateTask(${task.id}, 'done')">Mark as Done</button>
+                <button class="pending-btn" onclick="updateTask(${task.id}, 'pending')">Mark as Pending</button>
+                <button class="delete-btn" onclick="deleteTask(${task.id})">Delete</button>
+            </div>
+        </div>
+        `;
+    }).join("");
+}
 
-        function renderError(errorMessage) {
-            resultBox.innerHTML = `
-                <div class="error-card">
-                    <strong>Error</strong>
-                    <div style="margin-top: 10px;">${escapeHtml(errorMessage)}</div>
-                </div>
-            `;
-        }
+async function loadTasks() {
+    tasksList.innerHTML = `<div class="loading">Loading tasks...</div>`;
+    const res = await fetch("/tasks");
+    const data = await res.json();
+    renderTasks(data.tasks);
+}
 
-        function renderFallback(data) {
-            resultBox.textContent = JSON.stringify(data, null, 2);
-        }
+async function sendMessage() {
+    const message = document.getElementById("messageInput").value;
+    statusText.textContent = "Sending...";
 
-        async function updateTaskStatus(taskId, newStatus) {
-            statusText.textContent = "Updating task...";
+    const res = await fetch(`/smart-ai-browser?message=${encodeURIComponent(message)}`);
+    const data = await res.json();
 
-            try {
-                const response = await fetch(`/tasks/${taskId}`, {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        status: newStatus
-                    })
-                });
+    resultBox.textContent = JSON.stringify(data, null, 2);
+    statusText.textContent = "Done";
 
-                const data = await response.json();
+    loadTasks();
+}
 
-                if (!response.ok || data.status === "error") {
-                    renderError(data.message || "Could not update task.");
-                    statusText.textContent = "Error";
-                    return;
-                }
+async function updateTask(id, status) {
+    await fetch(`/tasks/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+    });
 
-                statusText.textContent = "Task updated";
-                await loadTasks();
-            } catch (error) {
-                renderError("Request failed: " + error.message);
-                statusText.textContent = "Error";
-            }
-        }
+    statusText.textContent = "Task updated";
+    loadTasks();
+}
 
-        function renderTasks(tasks) {
-            if (!Array.isArray(tasks) || tasks.length === 0) {
-                tasksList.innerHTML = `
-                    <div class="empty-state">
-                        No tasks yet.
-                        <div class="small-note">Create one using the message box above.</div>
-                    </div>
-                `;
-                return;
-            }
+async function deleteTask(id) {
+    if (!confirm("Delete this task?")) return;
 
-            tasksList.innerHTML = tasks.map(task => {
-                const description = task.description ? escapeHtml(task.description) : "No description";
-                const createdAt = task.created_at ? escapeHtml(task.created_at) : "Unknown";
-                const doneClass = task.status === "done" ? "done-task" : "";
+    await fetch(`/tasks/${id}`, {
+        method: "DELETE"
+    });
 
-                return `
-                    <div class="task-item ${doneClass}">
-                        <div class="task-item-title">${escapeHtml(task.title)}</div>
-                        <div class="task-item-description">${description}</div>
-                        <div class="task-row"><strong>Task ID:</strong> ${escapeHtml(task.id)}</div>
-                        <div class="task-row"><strong>Created at:</strong> ${createdAt}</div>
-                        <div>
-                            <span class="badge badge-priority">Priority: ${escapeHtml(task.priority)}</span>
-                            <span class="badge badge-status">Status: ${escapeHtml(task.status)}</span>
-                        </div>
-                        <div class="task-actions">
-                            <button class="action-button done-button" onclick="updateTaskStatus(${task.id}, 'done')">Mark as Done</button>
-                            <button class="action-button pending-button" onclick="updateTaskStatus(${task.id}, 'pending')">Mark as Pending</button>
-                        </div>
-                    </div>
-                `;
-            }).join("");
-        }
+    statusText.textContent = "Task deleted";
+    loadTasks();
+}
 
-        async function loadTasks() {
-            tasksList.innerHTML = `<div class="loading">Loading tasks...</div>`;
-
-            try {
-                const response = await fetch("/tasks");
-                const data = await response.json();
-
-                if (!response.ok || data.status === "error") {
-                    tasksList.innerHTML = `
-                        <div class="error-card">
-                            <strong>Could not load tasks</strong>
-                            <div style="margin-top: 10px;">${escapeHtml(data.message || "Unknown error")}</div>
-                        </div>
-                    `;
-                    return;
-                }
-
-                renderTasks(data.tasks);
-            } catch (error) {
-                tasksList.innerHTML = `
-                    <div class="error-card">
-                        <strong>Could not load tasks</strong>
-                        <div style="margin-top: 10px;">${escapeHtml(error.message)}</div>
-                    </div>
-                `;
-            }
-        }
-
-        async function sendMessage() {
-            const message = messageInput.value.trim();
-
-            if (!message) {
-                renderError("Please enter a message.");
-                return;
-            }
-
-            statusText.textContent = "Sending...";
-            resultBox.innerHTML = `<div class="loading">Waiting for response...</div>`;
-
-            try {
-                const url = `/smart-ai-browser?message=${encodeURIComponent(message)}`;
-                const response = await fetch(url);
-                const data = await response.json();
-
-                if (!response.ok) {
-                    renderError(data.message || "Request failed.");
-                    statusText.textContent = "Error";
-                    return;
-                }
-
-                if (data.status === "error") {
-                    renderError(data.message || "Something went wrong.");
-                    statusText.textContent = "Error";
-                    return;
-                }
-
-                if (data.action === "task" && data.task) {
-                    renderTask(data.task, message);
-                    statusText.textContent = "Done";
-                    await loadTasks();
-                    return;
-                }
-
-                if (data.action === "reply" && data.reply) {
-                    renderReply(data.reply);
-                    statusText.textContent = "Done";
-                    return;
-                }
-
-                renderFallback(data);
-                statusText.textContent = "Done";
-            } catch (error) {
-                renderError("Request failed: " + error.message);
-                statusText.textContent = "Error";
-            }
-        }
-
-        sendButton.addEventListener("click", sendMessage);
-        refreshTasksButton.addEventListener("click", loadTasks);
-
-        messageInput.addEventListener("keydown", function (event) {
-            if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-            }
-        });
-
-        loadTasks();
-    </script>
+loadTasks();
+</script>
 </body>
 </html>
