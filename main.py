@@ -339,6 +339,74 @@ def insert_task(title, description="", status="pending", priority="medium", due_
     return serialize_task(dict(task))
 
 
+def update_task_in_db(task_id, title=None, description=None, status=None, priority=None, due_date=None, due_date_provided=False):
+    ensure_tasks_schema()
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute(
+        """
+        SELECT id, title, description, status, priority, due_date, created_at
+        FROM tasks
+        WHERE id = %s;
+        """,
+        (task_id,)
+    )
+    existing_task = cur.fetchone()
+
+    if not existing_task:
+        cur.close()
+        conn.close()
+        return None
+
+    new_title = existing_task["title"]
+    if title is not None:
+        if not str(title).strip():
+            cur.close()
+            conn.close()
+            raise ValueError("Title cannot be empty")
+        new_title = title.strip()
+
+    new_description = description if description is not None else existing_task["description"]
+    new_status = status if status is not None else existing_task["status"]
+    new_priority = priority if priority is not None else existing_task["priority"]
+    new_due_date = existing_task["due_date"]
+
+    if due_date_provided:
+        new_due_date = due_date
+
+    if new_status not in ["pending", "done"]:
+        cur.close()
+        conn.close()
+        raise ValueError("Status must be 'pending' or 'done'")
+
+    if new_priority not in ["low", "medium", "high"]:
+        cur.close()
+        conn.close()
+        raise ValueError("Priority must be 'low', 'medium', or 'high'")
+
+    cur.execute(
+        """
+        UPDATE tasks
+        SET title = %s,
+            description = %s,
+            status = %s,
+            priority = %s,
+            due_date = %s
+        WHERE id = %s
+        RETURNING id, title, description, status, priority, due_date, created_at;
+        """,
+        (new_title, new_description, new_status, new_priority, new_due_date, task_id)
+    )
+    updated_task = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return serialize_task(dict(updated_task))
+
+
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -456,6 +524,54 @@ def create_task():
             "status": "success",
             "task": task
         }), 201
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/tasks/<int:task_id>", methods=["PUT"])
+def update_task(task_id):
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body must be JSON"
+            }), 400
+
+        title = data.get("title")
+        description = data.get("description")
+        status = data.get("status")
+        priority = data.get("priority")
+        due_date_provided = "due_date" in data
+        due_date = None
+
+        if due_date_provided:
+            due_date = parse_due_date(data.get("due_date"))
+
+        updated_task = update_task_in_db(
+            task_id=task_id,
+            title=title,
+            description=description,
+            status=status,
+            priority=priority,
+            due_date=due_date,
+            due_date_provided=due_date_provided
+        )
+
+        if not updated_task:
+            return jsonify({
+                "status": "error",
+                "message": "Task not found"
+            }), 404
+
+        return jsonify({
+            "status": "success",
+            "task": updated_task
+        })
     except Exception as e:
         return jsonify({
             "status": "error",
