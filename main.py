@@ -579,6 +579,45 @@ def update_task(task_id):
         }), 500
 
 
+@app.route("/tasks/<int:task_id>", methods=["DELETE"])
+def delete_task(task_id):
+    try:
+        ensure_tasks_schema()
+
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            DELETE FROM tasks
+            WHERE id = %s
+            RETURNING id, title, description, status, priority, due_date, created_at;
+            """,
+            (task_id,)
+        )
+        deleted_task = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        if not deleted_task:
+            return jsonify({
+                "status": "error",
+                "message": "Task not found"
+            }), 404
+
+        return jsonify({
+            "status": "success",
+            "message": "Task deleted",
+            "task": serialize_task(dict(deleted_task))
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
 @app.route("/quick-add")
 def quick_add():
     try:
