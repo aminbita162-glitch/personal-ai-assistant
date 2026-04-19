@@ -21,6 +21,13 @@ h1 {
     font-size: 32px;
 }
 
+h3 {
+    margin-top: 28px;
+    margin-bottom: 12px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
 p {
     color: #4b5563;
     margin-top: 0;
@@ -42,6 +49,31 @@ textarea {
     font-size: 16px;
     box-sizing: border-box;
     resize: vertical;
+    background: #ffffff;
+    color: #111827;
+    margin-bottom: 16px;
+}
+
+input {
+    width: 100%;
+    min-height: 52px;
+    padding: 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    font-size: 16px;
+    box-sizing: border-box;
+    background: #ffffff;
+    color: #111827;
+    margin-bottom: 16px;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+input:focus,
+textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 button {
@@ -115,4 +147,20 @@ button:hover {
 
 .loading {
     padding: 16px;
+}
+
+#statusText {
+    margin-top: 12px;
+    font-size: 14px;
+    color: #6b7280;
+}
+
+#resultBox {
+    margin-top: 12px;
+    padding: 16px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
