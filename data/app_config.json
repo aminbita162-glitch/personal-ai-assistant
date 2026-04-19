@@ -1,7 +1,8 @@
 {
   "app_name": "Personal AI Assistant",
-  "version": "1.0",
+  "version": "1.0.0",
   "notifications_enabled": true,
   "default_priority": "medium",
-  "alarm_sound": "notification.mp3"
+  "alarm_sound": "notification.mp3",
+  "reminder_window_hours": 1
 }
