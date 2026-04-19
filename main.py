@@ -19,6 +19,8 @@ def add_cors_headers(response):
 
 @app.route("/tasks", methods=["OPTIONS"])
 @app.route("/tasks/<int:task_id>", methods=["OPTIONS"])
+@app.route("/appointments", methods=["OPTIONS"])
+@app.route("/appointments/<int:appointment_id>", methods=["OPTIONS"])
 @app.route("/init-db", methods=["OPTIONS"])
 @app.route("/ai", methods=["OPTIONS"])
 @app.route("/ai-browser", methods=["OPTIONS"])
@@ -27,7 +29,7 @@ def add_cors_headers(response):
 @app.route("/ai-to-task-browser", methods=["OPTIONS"])
 @app.route("/smart-ai", methods=["OPTIONS"])
 @app.route("/smart-ai-browser", methods=["OPTIONS"])
-def options_handler(task_id=None):
+def options_handler(task_id=None, appointment_id=None):
     return ("", 204)
 
 
@@ -58,6 +60,19 @@ def serialize_task(task):
     return task
 
 
+def serialize_appointment(appointment):
+    if not appointment:
+        return appointment
+
+    if isinstance(appointment.get("appointment_time"), datetime):
+        appointment["appointment_time"] = appointment["appointment_time"].isoformat()
+
+    if isinstance(appointment.get("created_at"), datetime):
+        appointment["created_at"] = appointment["created_at"].isoformat()
+
+    return appointment
+
+
 def parse_due_date(value):
     if value in [None, ""]:
         return None
@@ -71,6 +86,21 @@ def parse_due_date(value):
         return datetime.fromisoformat(cleaned)
 
     raise ValueError("due_date must be a valid ISO datetime string")
+
+
+def parse_appointment_time(value):
+    if value in [None, ""]:
+        return None
+
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+
+        cleaned = cleaned.replace("Z", "+00:00")
+        return datetime.fromisoformat(cleaned)
+
+    raise ValueError("appointment_time must be a valid ISO datetime string")
 
 
 def ensure_tasks_schema():
@@ -101,6 +131,50 @@ def ensure_tasks_schema():
         """
         ALTER TABLE tasks
         ADD COLUMN IF NOT EXISTS due_date TIMESTAMP NULL;
+        """
+    )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def ensure_appointments_schema():
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS appointments (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            appointment_time TIMESTAMP NOT NULL,
+            location TEXT,
+            status TEXT NOT NULL DEFAULT 'scheduled',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+
+    cur.execute(
+        """
+        ALTER TABLE appointments
+        ADD COLUMN IF NOT EXISTS description TEXT;
+        """
+    )
+
+    cur.execute(
+        """
+        ALTER TABLE appointments
+        ADD COLUMN IF NOT EXISTS location TEXT;
+        """
+    )
+
+    cur.execute(
+        """
+        ALTER TABLE appointments
+        ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'scheduled';
         """
     )
 
@@ -339,6 +413,29 @@ def insert_task(title, description="", status="pending", priority="medium", due_
     return serialize_task(dict(task))
 
 
+def insert_appointment(title, appointment_time, description="", location="", status="scheduled"):
+    ensure_appointments_schema()
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute(
+        """
+        INSERT INTO appointments (title, description, appointment_time, location, status)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING id, title, description, appointment_time, location, status, created_at;
+        """,
+        (title, description, appointment_time, location, status)
+    )
+
+    appointment = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return serialize_appointment(dict(appointment))
+
+
 def update_task_in_db(task_id, title=None, description=None, status=None, priority=None, due_date=None, due_date_provided=False):
     ensure_tasks_schema()
 
@@ -407,6 +504,74 @@ def update_task_in_db(task_id, title=None, description=None, status=None, priori
     return serialize_task(dict(updated_task))
 
 
+def update_appointment_in_db(appointment_id, title=None, description=None, appointment_time=None, location=None, status=None, appointment_time_provided=False):
+    ensure_appointments_schema()
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute(
+        """
+        SELECT id, title, description, appointment_time, location, status, created_at
+        FROM appointments
+        WHERE id = %s;
+        """,
+        (appointment_id,)
+    )
+    existing_appointment = cur.fetchone()
+
+    if not existing_appointment:
+        cur.close()
+        conn.close()
+        return None
+
+    new_title = existing_appointment["title"]
+    if title is not None:
+        if not str(title).strip():
+            cur.close()
+            conn.close()
+            raise ValueError("Appointment title cannot be empty")
+        new_title = title.strip()
+
+    new_description = description if description is not None else existing_appointment["description"]
+    new_location = location if location is not None else existing_appointment["location"]
+    new_status = status if status is not None else existing_appointment["status"]
+    new_appointment_time = existing_appointment["appointment_time"]
+
+    if appointment_time_provided:
+        new_appointment_time = appointment_time
+
+    if not new_appointment_time:
+        cur.close()
+        conn.close()
+        raise ValueError("appointment_time is required")
+
+    if new_status not in ["scheduled", "done", "cancelled"]:
+        cur.close()
+        conn.close()
+        raise ValueError("status must be 'scheduled', 'done', or 'cancelled'")
+
+    cur.execute(
+        """
+        UPDATE appointments
+        SET title = %s,
+            description = %s,
+            appointment_time = %s,
+            location = %s,
+            status = %s
+        WHERE id = %s
+        RETURNING id, title, description, appointment_time, location, status, created_at;
+        """,
+        (new_title, new_description, new_appointment_time, new_location, new_status, appointment_id)
+    )
+    updated_appointment = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return serialize_appointment(dict(updated_appointment))
+
+
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -445,6 +610,7 @@ def db_check():
 def initialize_database():
     try:
         ensure_tasks_schema()
+        ensure_appointments_schema()
         return jsonify({
             "status": "success",
             "message": "Database initialized successfully"
@@ -479,6 +645,37 @@ def get_tasks():
         return jsonify({
             "status": "success",
             "tasks": serialized_tasks
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/appointments", methods=["GET"])
+def get_appointments():
+    try:
+        ensure_appointments_schema()
+
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT id, title, description, appointment_time, location, status, created_at
+            FROM appointments
+            ORDER BY appointment_time ASC, id DESC;
+            """
+        )
+        appointments = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        serialized_appointments = [serialize_appointment(dict(appointment)) for appointment in appointments]
+
+        return jsonify({
+            "status": "success",
+            "appointments": serialized_appointments
         })
     except Exception as e:
         return jsonify({
@@ -523,6 +720,62 @@ def create_task():
         return jsonify({
             "status": "success",
             "task": task
+        }), 201
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/appointments", methods=["POST"])
+def create_appointment():
+    try:
+        ensure_appointments_schema()
+
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body must be JSON"
+            }), 400
+
+        title = data.get("title")
+        description = data.get("description", "")
+        location = data.get("location", "")
+        status = data.get("status", "scheduled")
+        appointment_time = parse_appointment_time(data.get("appointment_time"))
+
+        if not title or not str(title).strip():
+            return jsonify({
+                "status": "error",
+                "message": "Title is required"
+            }), 400
+
+        if not appointment_time:
+            return jsonify({
+                "status": "error",
+                "message": "appointment_time is required"
+            }), 400
+
+        if status not in ["scheduled", "done", "cancelled"]:
+            return jsonify({
+                "status": "error",
+                "message": "status must be 'scheduled', 'done', or 'cancelled'"
+            }), 400
+
+        appointment = insert_appointment(
+            title=title.strip(),
+            description=description,
+            appointment_time=appointment_time,
+            location=location,
+            status=status
+        )
+
+        return jsonify({
+            "status": "success",
+            "appointment": appointment
         }), 201
     except Exception as e:
         return jsonify({
@@ -579,6 +832,54 @@ def update_task(task_id):
         }), 500
 
 
+@app.route("/appointments/<int:appointment_id>", methods=["PUT"])
+def update_appointment(appointment_id):
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body must be JSON"
+            }), 400
+
+        title = data.get("title")
+        description = data.get("description")
+        location = data.get("location")
+        status = data.get("status")
+        appointment_time_provided = "appointment_time" in data
+        appointment_time = None
+
+        if appointment_time_provided:
+            appointment_time = parse_appointment_time(data.get("appointment_time"))
+
+        updated_appointment = update_appointment_in_db(
+            appointment_id=appointment_id,
+            title=title,
+            description=description,
+            appointment_time=appointment_time,
+            location=location,
+            status=status,
+            appointment_time_provided=appointment_time_provided
+        )
+
+        if not updated_appointment:
+            return jsonify({
+                "status": "error",
+                "message": "Appointment not found"
+            }), 404
+
+        return jsonify({
+            "status": "success",
+            "appointment": updated_appointment
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
 @app.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
     try:
@@ -610,6 +911,45 @@ def delete_task(task_id):
             "status": "success",
             "message": "Task deleted",
             "task": serialize_task(dict(deleted_task))
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/appointments/<int:appointment_id>", methods=["DELETE"])
+def delete_appointment(appointment_id):
+    try:
+        ensure_appointments_schema()
+
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            DELETE FROM appointments
+            WHERE id = %s
+            RETURNING id, title, description, appointment_time, location, status, created_at;
+            """,
+            (appointment_id,)
+        )
+        deleted_appointment = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        if not deleted_appointment:
+            return jsonify({
+                "status": "error",
+                "message": "Appointment not found"
+            }), 404
+
+        return jsonify({
+            "status": "success",
+            "message": "Appointment deleted",
+            "appointment": serialize_appointment(dict(deleted_appointment))
         })
     except Exception as e:
         return jsonify({
