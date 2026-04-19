@@ -1,6 +1,7 @@
 const resultBox = document.getElementById("resultBox");
 const statusText = document.getElementById("statusText");
 const tasksList = document.getElementById("tasksList");
+const appointmentsList = document.getElementById("appointmentsList");
 const messageInput = document.getElementById("messageInput");
 const dueDateInput = document.getElementById("dueDateInput");
 const sendButton = document.getElementById("sendButton");
@@ -9,6 +10,18 @@ const refreshTasksButton = document.getElementById("refreshTasksButton");
 function formatDateForDisplay(value) {
     if (!value) {
         return "No due date";
+    }
+
+    try {
+        return new Date(value).toLocaleString();
+    } catch (error) {
+        return value;
+    }
+}
+
+function formatAppointmentTimeForDisplay(value) {
+    if (!value) {
+        return "No time";
     }
 
     try {
@@ -50,6 +63,32 @@ function renderTasks(tasks) {
     }).join("");
 }
 
+function renderAppointments(appointments) {
+    if (!appointmentsList) {
+        return;
+    }
+
+    if (!appointments || !Array.isArray(appointments) || appointments.length === 0) {
+        appointmentsList.innerHTML = `<div class="loading">No appointments yet.</div>`;
+        return;
+    }
+
+    appointmentsList.innerHTML = appointments.map(appointment => {
+        return `
+        <div class="task-item">
+            <strong>${escapeHtml(appointment.title)}</strong><br>
+            ${escapeHtml(appointment.description || "No description")}<br>
+            Appointment ID: ${appointment.id}<br>
+            Time: ${escapeHtml(formatAppointmentTimeForDisplay(appointment.appointment_time))}<br>
+            Location: ${escapeHtml(appointment.location || "No location")}<br>
+            Created at: ${escapeHtml(appointment.created_at)}<br>
+
+            <span class="badge badge-status">Status: ${escapeHtml(appointment.status || "scheduled")}</span>
+        </div>
+        `;
+    }).join("");
+}
+
 async function loadTasks() {
     tasksList.innerHTML = `<div class="loading">Loading tasks...</div>`;
 
@@ -62,6 +101,24 @@ async function loadTasks() {
     }
 
     renderTasks(data.tasks);
+}
+
+async function loadAppointments() {
+    if (!appointmentsList) {
+        return;
+    }
+
+    appointmentsList.innerHTML = `<div class="loading">Loading appointments...</div>`;
+
+    const res = await fetch("/appointments");
+    const data = await res.json();
+
+    if (!data.appointments || !Array.isArray(data.appointments)) {
+        appointmentsList.innerHTML = `<div class="loading">Could not load appointments.</div>`;
+        return;
+    }
+
+    renderAppointments(data.appointments);
 }
 
 async function createTaskFromMessage(message, dueDateValue) {
@@ -138,6 +195,7 @@ async function sendMessage() {
             dueDateInput.value = "";
         }
         loadTasks();
+        loadAppointments();
         return;
     }
 
@@ -145,6 +203,7 @@ async function sendMessage() {
         resultBox.textContent = JSON.stringify(data, null, 2);
         statusText.textContent = "Done";
         loadTasks();
+        loadAppointments();
         return;
     }
 
@@ -156,6 +215,7 @@ async function sendMessage() {
         dueDateInput.value = "";
     }
     loadTasks();
+    loadAppointments();
 }
 
 async function updateTask(id, status) {
@@ -185,7 +245,11 @@ if (sendButton) {
 }
 
 if (refreshTasksButton) {
-    refreshTasksButton.addEventListener("click", loadTasks);
+    refreshTasksButton.addEventListener("click", function () {
+        loadTasks();
+        loadAppointments();
+    });
 }
 
 loadTasks();
+loadAppointments();
