@@ -166,6 +166,66 @@
             border-radius: 12px;
             padding: 16px;
         }
+
+        .tasks-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 28px;
+            margin-bottom: 10px;
+        }
+
+        .refresh-button {
+            margin-top: 0;
+            background: #2563eb;
+            padding: 10px 14px;
+            font-size: 14px;
+        }
+
+        .refresh-button:hover {
+            background: #1d4ed8;
+        }
+
+        .task-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .task-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            background: #ffffff;
+        }
+
+        .task-item-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #111827;
+        }
+
+        .task-item-description {
+            color: #4b5563;
+            margin-bottom: 10px;
+            white-space: pre-wrap;
+        }
+
+        .empty-state {
+            background: #f9fafb;
+            border: 1px dashed #d1d5db;
+            border-radius: 12px;
+            padding: 16px;
+            color: #6b7280;
+        }
+
+        .small-note {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
@@ -183,6 +243,15 @@
         <div class="section-title">Result</div>
         <div class="result-box" id="resultBox">No result yet.</div>
 
+        <div class="tasks-header">
+            <div class="section-title" style="margin: 0;">Tasks List</div>
+            <button id="refreshTasksButton" class="refresh-button">Refresh Tasks</button>
+        </div>
+
+        <div id="tasksList" class="task-list">
+            <div class="loading">Loading tasks...</div>
+        </div>
+
         <div class="section-title">Examples</div>
         <ul class="example-list">
             <li>buy milk tomorrow</li>
@@ -194,9 +263,11 @@
 
     <script>
         const sendButton = document.getElementById("sendButton");
+        const refreshTasksButton = document.getElementById("refreshTasksButton");
         const messageInput = document.getElementById("messageInput");
         const resultBox = document.getElementById("resultBox");
         const statusText = document.getElementById("statusText");
+        const tasksList = document.getElementById("tasksList");
 
         function escapeHtml(value) {
             return String(value)
@@ -249,6 +320,64 @@
             resultBox.textContent = JSON.stringify(data, null, 2);
         }
 
+        function renderTasks(tasks) {
+            if (!Array.isArray(tasks) || tasks.length === 0) {
+                tasksList.innerHTML = `
+                    <div class="empty-state">
+                        No tasks yet.
+                        <div class="small-note">Create one using the message box above.</div>
+                    </div>
+                `;
+                return;
+            }
+
+            tasksList.innerHTML = tasks.map(task => {
+                const description = task.description ? escapeHtml(task.description) : "No description";
+                const createdAt = task.created_at ? escapeHtml(task.created_at) : "Unknown";
+
+                return `
+                    <div class="task-item">
+                        <div class="task-item-title">${escapeHtml(task.title)}</div>
+                        <div class="task-item-description">${description}</div>
+                        <div class="task-row"><strong>Task ID:</strong> ${escapeHtml(task.id)}</div>
+                        <div class="task-row"><strong>Created at:</strong> ${createdAt}</div>
+                        <div>
+                            <span class="badge badge-priority">Priority: ${escapeHtml(task.priority)}</span>
+                            <span class="badge badge-status">Status: ${escapeHtml(task.status)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        async function loadTasks() {
+            tasksList.innerHTML = `<div class="loading">Loading tasks...</div>`;
+
+            try {
+                const response = await fetch("/tasks");
+                const data = await response.json();
+
+                if (!response.ok || data.status === "error") {
+                    tasksList.innerHTML = `
+                        <div class="error-card">
+                            <strong>Could not load tasks</strong>
+                            <div style="margin-top: 10px;">${escapeHtml(data.message || "Unknown error")}</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                renderTasks(data.tasks);
+            } catch (error) {
+                tasksList.innerHTML = `
+                    <div class="error-card">
+                        <strong>Could not load tasks</strong>
+                        <div style="margin-top: 10px;">${escapeHtml(error.message)}</div>
+                    </div>
+                `;
+            }
+        }
+
         async function sendMessage() {
             const message = messageInput.value.trim();
 
@@ -280,6 +409,7 @@
                 if (data.action === "task" && data.task) {
                     renderTask(data.task, message);
                     statusText.textContent = "Done";
+                    await loadTasks();
                     return;
                 }
 
@@ -298,6 +428,7 @@
         }
 
         sendButton.addEventListener("click", sendMessage);
+        refreshTasksButton.addEventListener("click", loadTasks);
 
         messageInput.addEventListener("keydown", function (event) {
             if (event.key === "Enter" && !event.shiftKey) {
@@ -305,6 +436,8 @@
                 sendMessage();
             }
         });
+
+        loadTasks();
     </script>
 </body>
 </html>
