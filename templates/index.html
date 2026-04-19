@@ -4,9 +4,164 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personal AI Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            margin: 0;
+            padding: 0;
+            color: #111827;
+        }
+
+        .container {
+            max-width: 720px;
+            margin: 40px auto;
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-size: 32px;
+        }
+
+        p {
+            color: #4b5563;
+            margin-top: 0;
+            margin-bottom: 24px;
+        }
+
+        .label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            font-size: 16px;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        button {
+            margin-top: 16px;
+            background: #111827;
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1f2937;
+        }
+
+        .result-box {
+            margin-top: 24px;
+            padding: 16px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .status {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        .section-title {
+            margin-top: 28px;
+            margin-bottom: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .example-list {
+            margin: 0;
+            padding-left: 18px;
+            color: #374151;
+        }
+
+        .example-list li {
+            margin-bottom: 8px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Personal AI Assistant</h1>
-    <p>Frontend is starting...</p>
+    <div class="container">
+        <h1>Personal AI Assistant</h1>
+        <p>Talk to your assistant and let it reply or create a task automatically.</p>
+
+        <label for="messageInput" class="label">Your message</label>
+        <textarea id="messageInput" placeholder="Example: buy milk tomorrow"></textarea>
+
+        <button id="sendButton">Send</button>
+
+        <div class="status" id="statusText">Ready</div>
+
+        <div class="section-title">Result</div>
+        <div class="result-box" id="resultBox">No result yet.</div>
+
+        <div class="section-title">Examples</div>
+        <ul class="example-list">
+            <li>buy milk tomorrow</li>
+            <li>call doctor this evening</li>
+            <li>plan my day</li>
+            <li>what should I do today?</li>
+        </ul>
+    </div>
+
+    <script>
+        const sendButton = document.getElementById("sendButton");
+        const messageInput = document.getElementById("messageInput");
+        const resultBox = document.getElementById("resultBox");
+        const statusText = document.getElementById("statusText");
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+
+            if (!message) {
+                resultBox.textContent = "Please enter a message.";
+                return;
+            }
+
+            statusText.textContent = "Sending...";
+            resultBox.textContent = "Waiting for response...";
+
+            try {
+                const url = `/smart-ai-browser?message=${encodeURIComponent(message)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                resultBox.textContent = JSON.stringify(data, null, 2);
+                statusText.textContent = "Done";
+            } catch (error) {
+                resultBox.textContent = "Request failed: " + error.message;
+                statusText.textContent = "Error";
+            }
+        }
+
+        sendButton.addEventListener("click", sendMessage);
+
+        messageInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
 </body>
 </html>
