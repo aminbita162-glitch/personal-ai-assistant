@@ -784,6 +784,58 @@ def create_appointment():
         }), 500
 
 
+@app.route("/appointments/create")
+def create_appointment_browser():
+    try:
+        ensure_appointments_schema()
+
+        title = request.args.get("title", "").strip()
+        description = request.args.get("description", "").strip()
+        location = request.args.get("location", "").strip()
+        status = request.args.get("status", "scheduled").strip().lower()
+        appointment_time_raw = request.args.get("appointment_time", "").strip()
+        scheduled_at_raw = request.args.get("scheduled_at", "").strip()
+
+        raw_time_value = appointment_time_raw or scheduled_at_raw
+        appointment_time = parse_appointment_time(raw_time_value)
+
+        if not title:
+            return jsonify({
+                "status": "error",
+                "message": "title is required"
+            }), 400
+
+        if not appointment_time:
+            return jsonify({
+                "status": "error",
+                "message": "appointment_time or scheduled_at is required"
+            }), 400
+
+        if status not in ["scheduled", "done", "cancelled"]:
+            return jsonify({
+                "status": "error",
+                "message": "status must be 'scheduled', 'done', or 'cancelled'"
+            }), 400
+
+        appointment = insert_appointment(
+            title=title,
+            description=description,
+            appointment_time=appointment_time,
+            location=location,
+            status=status
+        )
+
+        return jsonify({
+            "status": "success",
+            "appointment": appointment
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
 @app.route("/tasks/<int:task_id>", methods=["PUT"])
 def update_task(task_id):
     try:
