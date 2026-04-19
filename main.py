@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, render_template
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -21,6 +21,7 @@ def add_cors_headers(response):
 @app.route("/tasks/<int:task_id>", methods=["OPTIONS"])
 @app.route("/appointments", methods=["OPTIONS"])
 @app.route("/appointments/<int:appointment_id>", methods=["OPTIONS"])
+@app.route("/reminders", methods=["OPTIONS"])
 @app.route("/init-db", methods=["OPTIONS"])
 @app.route("/ai", methods=["OPTIONS"])
 @app.route("/ai-browser", methods=["OPTIONS"])
@@ -71,6 +72,16 @@ def serialize_appointment(appointment):
         appointment["created_at"] = appointment["created_at"].isoformat()
 
     return appointment
+
+
+def serialize_reminder_item(item, time_field):
+    if not item:
+        return item
+
+    if isinstance(item.get(time_field), datetime):
+        item[time_field] = item[time_field].isoformat()
+
+    return item
 
 
 def parse_due_date(value):
@@ -676,6 +687,63 @@ def get_appointments():
         return jsonify({
             "status": "success",
             "appointments": serialized_appointments
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route("/reminders", methods=["GET"])
+def get_reminders():
+    try:
+        ensure_tasks_schema()
+        ensure_appointments_schema()
+
+        now = datetime.utcnow()
+        next_hour = now + timedelta(hours=1)
+
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute(
+            """
+            SELECT id, title, due_date, status
+            FROM tasks
+            WHERE due_date IS NOT NULL
+              AND due_date >= %s
+              AND due_date <= %s
+              AND status = 'pending'
+            ORDER BY due_date ASC;
+            """,
+            (now, next_hour)
+        )
+        task_rows = cur.fetchall()
+
+        cur.execute(
+            """
+            SELECT id, title, appointment_time, status
+            FROM appointments
+            WHERE appointment_time >= %s
+              AND appointment_time <= %s
+              AND status = 'scheduled'
+            ORDER BY appointment_time ASC;
+            """,
+            (now, next_hour)
+        )
+        appointment_rows = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        tasks = [serialize_reminder_item(dict(task), "due_date") for task in task_rows]
+        appointments = [serialize_reminder_item(dict(appointment), "appointment_time") for appointment in appointment_rows]
+
+        return jsonify({
+            "status": "success",
+            "tasks": tasks,
+            "appointments": appointments
         })
     except Exception as e:
         return jsonify({
