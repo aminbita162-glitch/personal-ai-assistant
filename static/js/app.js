@@ -2,6 +2,7 @@ const resultBox = document.getElementById("resultBox");
 const statusText = document.getElementById("statusText");
 const tasksList = document.getElementById("tasksList");
 const appointmentsList = document.getElementById("appointmentsList");
+const remindersList = document.getElementById("remindersList");
 const messageInput = document.getElementById("messageInput");
 const dueDateInput = document.getElementById("dueDateInput");
 const sendButton = document.getElementById("sendButton");
@@ -89,6 +90,47 @@ function renderAppointments(appointments) {
     }).join("");
 }
 
+function renderReminders(tasks, appointments) {
+    if (!remindersList) {
+        return;
+    }
+
+    const reminderItems = [];
+
+    if (Array.isArray(tasks)) {
+        tasks.forEach(task => {
+            reminderItems.push(`
+                <div class="task-item">
+                    <strong>Task reminder</strong><br>
+                    Title: ${escapeHtml(task.title)}<br>
+                    Due date: ${escapeHtml(formatDateForDisplay(task.due_date))}<br>
+                    <span class="badge badge-status">Status: ${escapeHtml(task.status || "pending")}</span>
+                </div>
+            `);
+        });
+    }
+
+    if (Array.isArray(appointments)) {
+        appointments.forEach(appointment => {
+            reminderItems.push(`
+                <div class="task-item">
+                    <strong>Appointment reminder</strong><br>
+                    Title: ${escapeHtml(appointment.title)}<br>
+                    Time: ${escapeHtml(formatAppointmentTimeForDisplay(appointment.appointment_time))}<br>
+                    <span class="badge badge-status">Status: ${escapeHtml(appointment.status || "scheduled")}</span>
+                </div>
+            `);
+        });
+    }
+
+    if (reminderItems.length === 0) {
+        remindersList.innerHTML = `<div class="loading">No reminders right now.</div>`;
+        return;
+    }
+
+    remindersList.innerHTML = reminderItems.join("");
+}
+
 async function loadTasks() {
     tasksList.innerHTML = `<div class="loading">Loading tasks...</div>`;
 
@@ -119,6 +161,24 @@ async function loadAppointments() {
     }
 
     renderAppointments(data.appointments);
+}
+
+async function loadReminders() {
+    if (!remindersList) {
+        return;
+    }
+
+    remindersList.innerHTML = `<div class="loading">Loading reminders...</div>`;
+
+    const res = await fetch("/reminders");
+    const data = await res.json();
+
+    if (data.status !== "success") {
+        remindersList.innerHTML = `<div class="loading">Could not load reminders.</div>`;
+        return;
+    }
+
+    renderReminders(data.tasks || [], data.appointments || []);
 }
 
 async function createTaskFromMessage(message, dueDateValue) {
@@ -196,6 +256,7 @@ async function sendMessage() {
         }
         loadTasks();
         loadAppointments();
+        loadReminders();
         return;
     }
 
@@ -204,6 +265,7 @@ async function sendMessage() {
         statusText.textContent = "Done";
         loadTasks();
         loadAppointments();
+        loadReminders();
         return;
     }
 
@@ -216,6 +278,7 @@ async function sendMessage() {
     }
     loadTasks();
     loadAppointments();
+    loadReminders();
 }
 
 async function updateTask(id, status) {
@@ -227,6 +290,7 @@ async function updateTask(id, status) {
 
     statusText.textContent = "Task updated";
     loadTasks();
+    loadReminders();
 }
 
 async function deleteTask(id) {
@@ -238,6 +302,7 @@ async function deleteTask(id) {
 
     statusText.textContent = "Task deleted";
     loadTasks();
+    loadReminders();
 }
 
 if (sendButton) {
@@ -248,8 +313,10 @@ if (refreshTasksButton) {
     refreshTasksButton.addEventListener("click", function () {
         loadTasks();
         loadAppointments();
+        loadReminders();
     });
 }
 
 loadTasks();
 loadAppointments();
+loadReminders();
