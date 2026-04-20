@@ -6,6 +6,7 @@ from routes.task_routes import init_task_routes, ensure_tasks_schema
 from routes.calendar_routes import init_calendar_routes, ensure_appointments_schema
 from routes.reminder_routes import init_reminder_routes
 from routes.ai_routes import init_ai_routes
+from services.user_service import create_user_table
 
 app = Flask(__name__)
 
@@ -81,6 +82,7 @@ def initialize_database():
     try:
         ensure_tasks_schema(get_connection)
         ensure_appointments_schema(get_connection)
+        create_user_table(get_connection)
 
         return jsonify({
             "status": "success",
