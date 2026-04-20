@@ -1,4 +1,5 @@
-flask
-psycopg2-binary
-gunicorn
+Flask==3.0.3
+psycopg2-binary==2.9.9
+gunicorn==21.2.0
 openai==1.30.1
+httpx==0.27.2
