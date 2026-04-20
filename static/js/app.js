@@ -7,6 +7,7 @@ const messageInput = document.getElementById("messageInput");
 const dueDateInput = document.getElementById("dueDateInput");
 const sendButton = document.getElementById("sendButton");
 const refreshTasksButton = document.getElementById("refreshTasksButton");
+const refreshRemindersButton = document.getElementById("refreshRemindersButton");
 
 function formatDateForDisplay(value) {
     if (!value) {
@@ -42,9 +43,18 @@ function escapeHtml(value) {
 }
 
 function renderTasks(tasks) {
+    if (!tasksList) {
+        return;
+    }
+
+    if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+        tasksList.innerHTML = `<div class="loading">No tasks yet.</div>`;
+        return;
+    }
+
     tasksList.innerHTML = tasks.map(task => {
         return `
-        <div class="task-item ${task.status === 'done' ? 'task-done' : ''}">
+        <div class="task-item ${task.status === "done" ? "task-done" : ""}">
             <strong>${escapeHtml(task.title)}</strong><br>
             ${escapeHtml(task.description || "No description")}<br>
             Task ID: ${task.id}<br>
@@ -132,6 +142,10 @@ function renderReminders(tasks, appointments) {
 }
 
 async function loadTasks() {
+    if (!tasksList) {
+        return;
+    }
+
     tasksList.innerHTML = `<div class="loading">Loading tasks...</div>`;
 
     const res = await fetch("/tasks");
@@ -207,10 +221,18 @@ async function updateTaskDueDate(taskId, dueDateValue) {
 }
 
 function renderReplyResult(replyText) {
+    if (!resultBox) {
+        return;
+    }
+
     resultBox.textContent = replyText;
 }
 
 function renderTaskResult(taskData, actionLabel) {
+    if (!resultBox) {
+        return;
+    }
+
     resultBox.textContent = JSON.stringify({
         status: "success",
         action: actionLabel,
@@ -219,7 +241,7 @@ function renderTaskResult(taskData, actionLabel) {
 }
 
 async function sendMessage() {
-    const message = messageInput.value.trim();
+    const message = messageInput ? messageInput.value.trim() : "";
     const dueDateValue = dueDateInput ? dueDateInput.value : "";
 
     if (!message) {
@@ -250,10 +272,15 @@ async function sendMessage() {
 
         renderTaskResult(finalTask, "task");
         statusText.textContent = "Done";
-        messageInput.value = "";
+
+        if (messageInput) {
+            messageInput.value = "";
+        }
+
         if (dueDateInput) {
             dueDateInput.value = "";
         }
+
         loadTasks();
         loadAppointments();
         loadReminders();
@@ -261,7 +288,10 @@ async function sendMessage() {
     }
 
     if (!dueDateValue) {
-        resultBox.textContent = JSON.stringify(data, null, 2);
+        if (resultBox) {
+            resultBox.textContent = JSON.stringify(data, null, 2);
+        }
+
         statusText.textContent = "Done";
         loadTasks();
         loadAppointments();
@@ -270,12 +300,21 @@ async function sendMessage() {
     }
 
     const manualTaskData = await createTaskFromMessage(message, dueDateValue);
-    resultBox.textContent = JSON.stringify(manualTaskData, null, 2);
+
+    if (resultBox) {
+        resultBox.textContent = JSON.stringify(manualTaskData, null, 2);
+    }
+
     statusText.textContent = "Done";
-    messageInput.value = "";
+
+    if (messageInput) {
+        messageInput.value = "";
+    }
+
     if (dueDateInput) {
         dueDateInput.value = "";
     }
+
     loadTasks();
     loadAppointments();
     loadReminders();
@@ -294,7 +333,9 @@ async function updateTask(id, status) {
 }
 
 async function deleteTask(id) {
-    if (!confirm("Delete this task?")) return;
+    if (!confirm("Delete this task?")) {
+        return;
+    }
 
     await fetch(`/tasks/${id}`, {
         method: "DELETE"
@@ -315,6 +356,10 @@ if (refreshTasksButton) {
         loadAppointments();
         loadReminders();
     });
+}
+
+if (refreshRemindersButton) {
+    refreshRemindersButton.addEventListener("click", loadReminders);
 }
 
 loadTasks();
