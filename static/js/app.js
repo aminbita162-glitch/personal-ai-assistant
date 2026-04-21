@@ -9,6 +9,13 @@ const sendButton = document.getElementById("sendButton");
 const refreshTasksButton = document.getElementById("refreshTasksButton");
 const refreshRemindersButton = document.getElementById("refreshRemindersButton");
 
+const emailInput = document.getElementById("emailInput");
+const passwordInput = document.getElementById("passwordInput");
+const signupButton = document.getElementById("signupButton");
+const loginButton = document.getElementById("loginButton");
+const logoutButton = document.getElementById("logoutButton");
+const authStatusText = document.getElementById("authStatusText");
+
 const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
 
 function formatDateForDisplay(value) {
@@ -81,6 +88,20 @@ function getAuthHeaders(extraHeaders = {}) {
     return headers;
 }
 
+function updateAuthStatus(text) {
+    if (authStatusText) {
+        authStatusText.textContent = text;
+    }
+}
+
+function updateLoggedInUiState() {
+    if (getAuthToken()) {
+        updateAuthStatus("Logged in");
+    } else {
+        updateAuthStatus("Not logged in");
+    }
+}
+
 async function authorizedFetch(url, options = {}) {
     const existingHeaders = options.headers || {};
     const finalOptions = {
@@ -92,6 +113,7 @@ async function authorizedFetch(url, options = {}) {
 
     if (response.status === 401) {
         clearAuthToken();
+        updateAuthStatus("Please login again");
 
         if (statusText) {
             statusText.textContent = "Please login again";
@@ -277,6 +299,103 @@ async function loadAppInfo() {
     }
 }
 
+async function signup() {
+    const email = emailInput ? emailInput.value.trim() : "";
+    const password = passwordInput ? passwordInput.value.trim() : "";
+
+    if (!email || !password) {
+        updateAuthStatus("Email and password required");
+        return;
+    }
+
+    updateAuthStatus("Signing up...");
+
+    try {
+        const res = await fetch("/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (data.status === "success" && data.user && data.user.auth_token) {
+            setAuthToken(data.user.auth_token);
+            updateAuthStatus("Signup successful and logged in");
+            loadTasks();
+            loadAppointments();
+            loadReminders();
+            return;
+        }
+
+        updateAuthStatus(data.message || "Signup failed");
+    } catch (error) {
+        updateAuthStatus("Signup failed");
+        console.error("Signup failed:", error);
+    }
+}
+
+async function login() {
+    const email = emailInput ? emailInput.value.trim() : "";
+    const password = passwordInput ? passwordInput.value.trim() : "";
+
+    if (!email || !password) {
+        updateAuthStatus("Email and password required");
+        return;
+    }
+
+    updateAuthStatus("Logging in...");
+
+    try {
+        const res = await fetch("/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (data.status === "success" && data.user && data.user.auth_token) {
+            setAuthToken(data.user.auth_token);
+            updateAuthStatus("Logged in");
+            loadTasks();
+            loadAppointments();
+            loadReminders();
+            return;
+        }
+
+        updateAuthStatus(data.message || "Login failed");
+    } catch (error) {
+        updateAuthStatus("Login failed");
+        console.error("Login failed:", error);
+    }
+}
+
+async function logout() {
+    try {
+        await authorizedFetch("/logout", {
+            method: "POST"
+        });
+    } catch (error) {
+        console.error("Logout request failed:", error);
+    }
+
+    clearAuthToken();
+    updateAuthStatus("Logged out");
+
+    if (tasksList) {
+        tasksList.innerHTML = `<div class="loading">No tasks yet.</div>`;
+    }
+
+    if (appointmentsList) {
+        appointmentsList.innerHTML = `<div class="loading">No appointments yet.</div>`;
+    }
+
+    if (remindersList) {
+        remindersList.innerHTML = `<div class="loading">No reminders right now.</div>`;
+    }
+}
+
 async function createTaskFromMessage(message, dueDateValue) {
     const createRes = await authorizedFetch("/tasks", {
         method: "POST",
@@ -444,6 +563,19 @@ if (refreshRemindersButton) {
     refreshRemindersButton.addEventListener("click", loadReminders);
 }
 
+if (signupButton) {
+    signupButton.addEventListener("click", signup);
+}
+
+if (loginButton) {
+    loginButton.addEventListener("click", login);
+}
+
+if (logoutButton) {
+    logoutButton.addEventListener("click", logout);
+}
+
+updateLoggedInUiState();
 loadTasks();
 loadAppointments();
 loadReminders();
