@@ -24,7 +24,8 @@ def ensure_appointments_schema(get_connection):
             appointment_time TIMESTAMP NOT NULL,
             location TEXT,
             status TEXT NOT NULL DEFAULT 'scheduled',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER
         );
         """
     )
@@ -50,9 +51,54 @@ def ensure_appointments_schema(get_connection):
         """
     )
 
+    cur.execute(
+        """
+        ALTER TABLE appointments
+        ADD COLUMN IF NOT EXISTS user_id INTEGER;
+        """
+    )
+
     conn.commit()
     cur.close()
     conn.close()
+
+
+def get_bearer_token():
+    auth_header = request.headers.get("Authorization", "").strip()
+
+    if not auth_header:
+        return None
+
+    if not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header.replace("Bearer ", "", 1).strip()
+    return token or None
+
+
+def get_authenticated_user(get_connection):
+    token = get_bearer_token()
+
+    if not token:
+        return None
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute(
+        """
+        SELECT id, email, auth_token, created_at
+        FROM users
+        WHERE auth_token = %s;
+        """,
+        (token,)
+    )
+
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    return dict(user) if user else None
 
 
 def insert_appointment(
@@ -61,7 +107,8 @@ def insert_appointment(
     appointment_time,
     description="",
     location="",
-    status="scheduled"
+    status="scheduled",
+    user_id=None
 ):
     ensure_appointments_schema(get_connection)
 
@@ -78,16 +125,17 @@ def insert_appointment(
 
     cur.execute(
         """
-        INSERT INTO appointments (title, description, appointment_time, location, status)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, title, description, appointment_time, location, status, created_at;
+        INSERT INTO appointments (title, description, appointment_time, location, status, user_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id, title, description, appointment_time, location, status, created_at, user_id;
         """,
         (
             payload["title"],
             payload["description"],
             payload["appointment_time"],
             payload["location"],
-            payload["status"]
+            payload["status"],
+            user_id
         )
     )
 
@@ -102,6 +150,7 @@ def insert_appointment(
 def update_appointment_in_db(
     get_connection,
     appointment_id,
+    user_id,
     title=None,
     description=None,
     appointment_time=None,
@@ -116,11 +165,11 @@ def update_appointment_in_db(
 
     cur.execute(
         """
-        SELECT id, title, description, appointment_time, location, status, created_at
+        SELECT id, title, description, appointment_time, location, status, created_at, user_id
         FROM appointments
-        WHERE id = %s;
+        WHERE id = %s AND user_id = %s;
         """,
-        (appointment_id,)
+        (appointment_id, user_id)
     )
     existing_appointment = cur.fetchone()
 
@@ -154,8 +203,8 @@ def update_appointment_in_db(
             appointment_time = %s,
             location = %s,
             status = %s
-        WHERE id = %s
-        RETURNING id, title, description, appointment_time, location, status, created_at;
+        WHERE id = %s AND user_id = %s
+        RETURNING id, title, description, appointment_time, location, status, created_at, user_id;
         """,
         (
             payload["title"],
@@ -163,7 +212,8 @@ def update_appointment_in_db(
             payload["appointment_time"],
             payload["location"],
             payload["status"],
-            appointment_id
+            appointment_id,
+            user_id
         )
     )
     updated_appointment = cur.fetchone()
@@ -180,14 +230,24 @@ def init_calendar_routes(app, get_connection):
         try:
             ensure_appointments_schema(get_connection)
 
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
+
             conn = get_connection()
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(
                 """
-                SELECT id, title, description, appointment_time, location, status, created_at
+                SELECT id, title, description, appointment_time, location, status, created_at, user_id
                 FROM appointments
+                WHERE user_id = %s
                 ORDER BY appointment_time ASC, id DESC;
-                """
+                """,
+                (authenticated_user["id"],)
             )
             appointments = cur.fetchall()
             cur.close()
@@ -213,6 +273,14 @@ def init_calendar_routes(app, get_connection):
         try:
             ensure_appointments_schema(get_connection)
 
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
+
             data = request.get_json()
 
             if not data:
@@ -229,7 +297,8 @@ def init_calendar_routes(app, get_connection):
                 description=data.get("description", ""),
                 appointment_time=appointment_time,
                 location=data.get("location", ""),
-                status=data.get("status", "scheduled")
+                status=data.get("status", "scheduled"),
+                user_id=authenticated_user["id"]
             )
 
             return jsonify({
@@ -247,6 +316,14 @@ def init_calendar_routes(app, get_connection):
         try:
             ensure_appointments_schema(get_connection)
 
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
+
             title = request.args.get("title", "").strip()
             description = request.args.get("description", "").strip()
             location = request.args.get("location", "").strip()
@@ -263,7 +340,8 @@ def init_calendar_routes(app, get_connection):
                 description=description,
                 appointment_time=appointment_time,
                 location=location,
-                status=status
+                status=status,
+                user_id=authenticated_user["id"]
             )
 
             return jsonify({
@@ -279,6 +357,14 @@ def init_calendar_routes(app, get_connection):
     @calendar_routes.route("/appointments/<int:appointment_id>", methods=["PUT"])
     def update_appointment(appointment_id):
         try:
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
+
             data = request.get_json()
 
             if not data:
@@ -296,6 +382,7 @@ def init_calendar_routes(app, get_connection):
             updated_appointment = update_appointment_in_db(
                 get_connection=get_connection,
                 appointment_id=appointment_id,
+                user_id=authenticated_user["id"],
                 title=data.get("title"),
                 description=data.get("description"),
                 appointment_time=appointment_time,
@@ -325,16 +412,24 @@ def init_calendar_routes(app, get_connection):
         try:
             ensure_appointments_schema(get_connection)
 
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
+
             conn = get_connection()
             cur = conn.cursor(cursor_factory=RealDictCursor)
 
             cur.execute(
                 """
                 DELETE FROM appointments
-                WHERE id = %s
-                RETURNING id, title, description, appointment_time, location, status, created_at;
+                WHERE id = %s AND user_id = %s
+                RETURNING id, title, description, appointment_time, location, status, created_at, user_id;
                 """,
-                (appointment_id,)
+                (appointment_id, authenticated_user["id"])
             )
             deleted_appointment = cur.fetchone()
             conn.commit()
