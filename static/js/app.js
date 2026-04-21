@@ -452,7 +452,7 @@ async function sendMessage() {
 
     statusText.textContent = "Sending...";
 
-    const res = await fetch(`/smart-ai-browser?message=${encodeURIComponent(message)}`);
+    const res = await authorizedFetch(`/smart-ai-browser?message=${encodeURIComponent(message)}`);
     const data = await res.json();
 
     if (data.action === "reply") {
