@@ -11,6 +11,26 @@
     <h1>Personal AI Assistant</h1>
     <p>Talk to your assistant and let it reply or create a task automatically.</p>
 
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;">
+        <h3>Account</h3>
+    </div>
+
+    <div class="task-item">
+        <label for="emailInput">Email</label>
+        <input id="emailInput" type="email" placeholder="Enter your email">
+
+        <label for="passwordInput" style="margin-top: 16px;">Password</label>
+        <input id="passwordInput" type="password" placeholder="Enter your password">
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;">
+            <button id="signupButton" type="button">Sign Up</button>
+            <button id="loginButton" type="button">Log In</button>
+            <button id="logoutButton" type="button">Log Out</button>
+        </div>
+
+        <div id="authStatusText" style="margin-top:16px;">Not logged in</div>
+    </div>
+
     <label>Your message</label>
     <textarea id="messageInput"></textarea>
 
@@ -57,7 +77,7 @@
     <div class="task-item">
         <strong>App Name:</strong> Personal AI Assistant<br>
         <strong>Version:</strong> 1.0.0<br>
-        <strong>Author:</strong> Aminbita162<br>
+        <strong>Author:</strong> Amin Azimi<br>
         <strong>Description:</strong> A smart productivity assistant for tasks, appointments, reminders, and AI-powered help.
     </div>
 </div>
