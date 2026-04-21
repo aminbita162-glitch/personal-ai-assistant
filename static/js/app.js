@@ -9,6 +9,8 @@ const sendButton = document.getElementById("sendButton");
 const refreshTasksButton = document.getElementById("refreshTasksButton");
 const refreshRemindersButton = document.getElementById("refreshRemindersButton");
 
+const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
+
 function formatDateForDisplay(value) {
     if (!value) {
         return "No due date";
@@ -40,6 +42,63 @@ function escapeHtml(value) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+function getAuthToken() {
+    try {
+        return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || "";
+    } catch (error) {
+        return "";
+    }
+}
+
+function setAuthToken(token) {
+    try {
+        if (token) {
+            localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+        }
+    } catch (error) {
+        console.error("Failed to save auth token:", error);
+    }
+}
+
+function clearAuthToken() {
+    try {
+        localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    } catch (error) {
+        console.error("Failed to clear auth token:", error);
+    }
+}
+
+function getAuthHeaders(extraHeaders = {}) {
+    const token = getAuthToken();
+    const headers = { ...extraHeaders };
+
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    return headers;
+}
+
+async function authorizedFetch(url, options = {}) {
+    const existingHeaders = options.headers || {};
+    const finalOptions = {
+        ...options,
+        headers: getAuthHeaders(existingHeaders)
+    };
+
+    const response = await fetch(url, finalOptions);
+
+    if (response.status === 401) {
+        clearAuthToken();
+
+        if (statusText) {
+            statusText.textContent = "Please login again";
+        }
+    }
+
+    return response;
 }
 
 function renderTasks(tasks) {
@@ -148,7 +207,7 @@ async function loadTasks() {
 
     tasksList.innerHTML = `<div class="loading">Loading tasks...</div>`;
 
-    const res = await fetch("/tasks");
+    const res = await authorizedFetch("/tasks");
     const data = await res.json();
 
     if (!data.tasks || !Array.isArray(data.tasks)) {
@@ -166,7 +225,7 @@ async function loadAppointments() {
 
     appointmentsList.innerHTML = `<div class="loading">Loading appointments...</div>`;
 
-    const res = await fetch("/appointments");
+    const res = await authorizedFetch("/appointments");
     const data = await res.json();
 
     if (!data.appointments || !Array.isArray(data.appointments)) {
@@ -184,7 +243,7 @@ async function loadReminders() {
 
     remindersList.innerHTML = `<div class="loading">Loading reminders...</div>`;
 
-    const res = await fetch("/reminders");
+    const res = await authorizedFetch("/reminders");
     const data = await res.json();
 
     if (data.status !== "success") {
@@ -219,7 +278,7 @@ async function loadAppInfo() {
 }
 
 async function createTaskFromMessage(message, dueDateValue) {
-    const createRes = await fetch("/tasks", {
+    const createRes = await authorizedFetch("/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -232,7 +291,7 @@ async function createTaskFromMessage(message, dueDateValue) {
 }
 
 async function updateTaskDueDate(taskId, dueDateValue) {
-    const updateRes = await fetch(`/tasks/${taskId}`, {
+    const updateRes = await authorizedFetch(`/tasks/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -344,7 +403,7 @@ async function sendMessage() {
 }
 
 async function updateTask(id, status) {
-    await fetch(`/tasks/${id}`, {
+    await authorizedFetch(`/tasks/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
@@ -360,7 +419,7 @@ async function deleteTask(id) {
         return;
     }
 
-    await fetch(`/tasks/${id}`, {
+    await authorizedFetch(`/tasks/${id}`, {
         method: "DELETE"
     });
 
