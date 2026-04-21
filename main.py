@@ -35,6 +35,7 @@ def add_cors_headers(response):
 @app.route("/smart-ai-browser", methods=["OPTIONS"])
 @app.route("/signup", methods=["OPTIONS"])
 @app.route("/login", methods=["OPTIONS"])
+@app.route("/app-info", methods=["OPTIONS"])
 def options_handler(task_id=None, appointment_id=None):
     return ("", 204)
 
@@ -55,6 +56,16 @@ def home():
 def health():
     return jsonify({
         "status": "ok"
+    })
+
+
+@app.route("/app-info")
+def app_info():
+    return jsonify({
+        "name": "Personal AI Assistant",
+        "version": "1.0.0",
+        "author": "Amin Azimi",
+        "description": "A smart productivity assistant for tasks, reminders, appointments, and AI-powered help."
     })
 
 
