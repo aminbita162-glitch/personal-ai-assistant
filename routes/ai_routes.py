@@ -1,11 +1,11 @@
 from flask import Blueprint, jsonify, request
-from psycopg2.extras import RealDictCursor
 
 from services.ai_service import (
     decide_smart_action,
     extract_task_from_message,
     generate_ai_reply
 )
+from services.auth_service import get_current_user
 from services.task_service import build_task_payload, serialize_task
 
 
@@ -55,44 +55,6 @@ def ensure_tasks_schema(get_connection):
     conn.commit()
     cur.close()
     conn.close()
-
-
-def get_bearer_token():
-    auth_header = request.headers.get("Authorization", "").strip()
-
-    if not auth_header:
-        return None
-
-    if not auth_header.startswith("Bearer "):
-        return None
-
-    token = auth_header.replace("Bearer ", "", 1).strip()
-    return token or None
-
-
-def get_authenticated_user(get_connection):
-    token = get_bearer_token()
-
-    if not token:
-        return None
-
-    conn = get_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-
-    cur.execute(
-        """
-        SELECT id, email, auth_token, created_at
-        FROM users
-        WHERE auth_token = %s;
-        """,
-        (token,)
-    )
-
-    user = cur.fetchone()
-    cur.close()
-    conn.close()
-
-    return dict(user) if user else None
 
 
 def insert_task(
@@ -211,13 +173,9 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/ai-to-task", methods=["POST"])
     def ai_to_task():
         try:
-            authenticated_user = get_authenticated_user(get_connection)
-
-            if not authenticated_user:
-                return jsonify({
-                    "status": "error",
-                    "message": "Authorization token is required"
-                }), 401
+            current_user, error_response, status_code = get_current_user(get_connection)
+            if error_response:
+                return jsonify(error_response), status_code
 
             data = request.get_json()
 
@@ -244,7 +202,7 @@ def init_ai_routes(app, get_connection):
                 status=extracted_task["status"],
                 priority=extracted_task["priority"],
                 due_date=None,
-                user_id=authenticated_user["id"]
+                user_id=current_user["id"]
             )
 
             return jsonify({
@@ -261,13 +219,9 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/ai-to-task-browser")
     def ai_to_task_browser():
         try:
-            authenticated_user = get_authenticated_user(get_connection)
-
-            if not authenticated_user:
-                return jsonify({
-                    "status": "error",
-                    "message": "Authorization token is required"
-                }), 401
+            current_user, error_response, status_code = get_current_user(get_connection)
+            if error_response:
+                return jsonify(error_response), status_code
 
             message = request.args.get("message", "").strip()
 
@@ -286,7 +240,7 @@ def init_ai_routes(app, get_connection):
                 status=extracted_task["status"],
                 priority=extracted_task["priority"],
                 due_date=None,
-                user_id=authenticated_user["id"]
+                user_id=current_user["id"]
             )
 
             return jsonify({
@@ -303,13 +257,9 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/smart-ai", methods=["POST"])
     def smart_ai():
         try:
-            authenticated_user = get_authenticated_user(get_connection)
-
-            if not authenticated_user:
-                return jsonify({
-                    "status": "error",
-                    "message": "Authorization token is required"
-                }), 401
+            current_user, error_response, status_code = get_current_user(get_connection)
+            if error_response:
+                return jsonify(error_response), status_code
 
             data = request.get_json()
 
@@ -337,7 +287,7 @@ def init_ai_routes(app, get_connection):
                     status=decision["status"],
                     priority=decision["priority"],
                     due_date=None,
-                    user_id=authenticated_user["id"]
+                    user_id=current_user["id"]
                 )
 
                 return jsonify({
@@ -361,13 +311,9 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/smart-ai-browser")
     def smart_ai_browser():
         try:
-            authenticated_user = get_authenticated_user(get_connection)
-
-            if not authenticated_user:
-                return jsonify({
-                    "status": "error",
-                    "message": "Authorization token is required"
-                }), 401
+            current_user, error_response, status_code = get_current_user(get_connection)
+            if error_response:
+                return jsonify(error_response), status_code
 
             message = request.args.get("message", "").strip()
 
@@ -387,7 +333,7 @@ def init_ai_routes(app, get_connection):
                     status=decision["status"],
                     priority=decision["priority"],
                     due_date=None,
-                    user_id=authenticated_user["id"]
+                    user_id=current_user["id"]
                 )
 
                 return jsonify({
