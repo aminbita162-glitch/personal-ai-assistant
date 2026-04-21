@@ -24,7 +24,8 @@ def ensure_tasks_schema(get_connection):
             status TEXT NOT NULL DEFAULT 'pending',
             priority TEXT NOT NULL DEFAULT 'medium',
             due_date TIMESTAMP NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER
         );
         """
     )
@@ -43,12 +44,19 @@ def ensure_tasks_schema(get_connection):
         """
     )
 
+    cur.execute(
+        """
+        ALTER TABLE tasks
+        ADD COLUMN IF NOT EXISTS user_id INTEGER;
+        """
+    )
+
     conn.commit()
     cur.close()
     conn.close()
 
 
-def insert_task(get_connection, title, description="", status="pending", priority="medium", due_date=None):
+def insert_task(get_connection, title, description="", status="pending", priority="medium", due_date=None, user_id=None):
     ensure_tasks_schema(get_connection)
 
     payload = build_task_payload(
@@ -56,7 +64,8 @@ def insert_task(get_connection, title, description="", status="pending", priorit
         description=description,
         status=status,
         priority=priority,
-        due_date=due_date
+        due_date=due_date,
+        user_id=user_id
     )
 
     conn = get_connection()
@@ -64,16 +73,17 @@ def insert_task(get_connection, title, description="", status="pending", priorit
 
     cur.execute(
         """
-        INSERT INTO tasks (title, description, status, priority, due_date)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, title, description, status, priority, due_date, created_at;
+        INSERT INTO tasks (title, description, status, priority, due_date, user_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id, title, description, status, priority, due_date, created_at, user_id;
         """,
         (
             payload["title"],
             payload["description"],
             payload["status"],
             payload["priority"],
-            payload["due_date"]
+            payload["due_date"],
+            payload["user_id"]
         )
     )
 
@@ -102,7 +112,7 @@ def update_task_in_db(
 
     cur.execute(
         """
-        SELECT id, title, description, status, priority, due_date, created_at
+        SELECT id, title, description, status, priority, due_date, created_at, user_id
         FROM tasks
         WHERE id = %s;
         """,
@@ -129,7 +139,8 @@ def update_task_in_db(
         description=new_description,
         status=new_status,
         priority=new_priority,
-        due_date=new_due_date
+        due_date=new_due_date,
+        user_id=existing_task["user_id"]
     )
 
     cur.execute(
@@ -141,7 +152,7 @@ def update_task_in_db(
             priority = %s,
             due_date = %s
         WHERE id = %s
-        RETURNING id, title, description, status, priority, due_date, created_at;
+        RETURNING id, title, description, status, priority, due_date, created_at, user_id;
         """,
         (
             payload["title"],
@@ -166,15 +177,30 @@ def init_task_routes(app, get_connection):
         try:
             ensure_tasks_schema(get_connection)
 
+            user_id = request.args.get("user_id")
+
             conn = get_connection()
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute(
-                """
-                SELECT id, title, description, status, priority, due_date, created_at
-                FROM tasks
-                ORDER BY id DESC;
-                """
-            )
+
+            if user_id:
+                cur.execute(
+                    """
+                    SELECT id, title, description, status, priority, due_date, created_at, user_id
+                    FROM tasks
+                    WHERE user_id = %s
+                    ORDER BY id DESC;
+                    """,
+                    (user_id,)
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, title, description, status, priority, due_date, created_at, user_id
+                    FROM tasks
+                    ORDER BY id DESC;
+                    """
+                )
+
             tasks = cur.fetchall()
             cur.close()
             conn.close()
@@ -205,6 +231,7 @@ def init_task_routes(app, get_connection):
                 }), 400
 
             due_date = parse_due_date(data.get("due_date"))
+            user_id = data.get("user_id")
 
             task = insert_task(
                 get_connection=get_connection,
@@ -212,7 +239,8 @@ def init_task_routes(app, get_connection):
                 description=data.get("description", ""),
                 status=data.get("status", "pending"),
                 priority=data.get("priority", "medium"),
-                due_date=due_date
+                due_date=due_date,
+                user_id=user_id
             )
 
             return jsonify({
@@ -281,7 +309,7 @@ def init_task_routes(app, get_connection):
                 """
                 DELETE FROM tasks
                 WHERE id = %s
-                RETURNING id, title, description, status, priority, due_date, created_at;
+                RETURNING id, title, description, status, priority, due_date, created_at, user_id;
                 """,
                 (task_id,)
             )
