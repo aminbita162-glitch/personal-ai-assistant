@@ -56,6 +56,44 @@ def ensure_tasks_schema(get_connection):
     conn.close()
 
 
+def get_bearer_token():
+    auth_header = request.headers.get("Authorization", "").strip()
+
+    if not auth_header:
+        return None
+
+    if not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header.replace("Bearer ", "", 1).strip()
+    return token or None
+
+
+def get_authenticated_user(get_connection):
+    token = get_bearer_token()
+
+    if not token:
+        return None
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    cur.execute(
+        """
+        SELECT id, email, auth_token, created_at
+        FROM users
+        WHERE auth_token = %s;
+        """,
+        (token,)
+    )
+
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    return dict(user) if user else None
+
+
 def insert_task(get_connection, title, description="", status="pending", priority="medium", due_date=None, user_id=None):
     ensure_tasks_schema(get_connection)
 
@@ -98,6 +136,7 @@ def insert_task(get_connection, title, description="", status="pending", priorit
 def update_task_in_db(
     get_connection,
     task_id,
+    user_id,
     title=None,
     description=None,
     status=None,
@@ -114,9 +153,9 @@ def update_task_in_db(
         """
         SELECT id, title, description, status, priority, due_date, created_at, user_id
         FROM tasks
-        WHERE id = %s;
+        WHERE id = %s AND user_id = %s;
         """,
-        (task_id,)
+        (task_id, user_id)
     )
     existing_task = cur.fetchone()
 
@@ -151,7 +190,7 @@ def update_task_in_db(
             status = %s,
             priority = %s,
             due_date = %s
-        WHERE id = %s
+        WHERE id = %s AND user_id = %s
         RETURNING id, title, description, status, priority, due_date, created_at, user_id;
         """,
         (
@@ -160,7 +199,8 @@ def update_task_in_db(
             payload["status"],
             payload["priority"],
             payload["due_date"],
-            task_id
+            task_id,
+            user_id
         )
     )
     updated_task = cur.fetchone()
@@ -177,29 +217,26 @@ def init_task_routes(app, get_connection):
         try:
             ensure_tasks_schema(get_connection)
 
-            user_id = request.args.get("user_id")
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
 
             conn = get_connection()
             cur = conn.cursor(cursor_factory=RealDictCursor)
 
-            if user_id:
-                cur.execute(
-                    """
-                    SELECT id, title, description, status, priority, due_date, created_at, user_id
-                    FROM tasks
-                    WHERE user_id = %s
-                    ORDER BY id DESC;
-                    """,
-                    (user_id,)
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT id, title, description, status, priority, due_date, created_at, user_id
-                    FROM tasks
-                    ORDER BY id DESC;
-                    """
-                )
+            cur.execute(
+                """
+                SELECT id, title, description, status, priority, due_date, created_at, user_id
+                FROM tasks
+                WHERE user_id = %s
+                ORDER BY id DESC;
+                """,
+                (authenticated_user["id"],)
+            )
 
             tasks = cur.fetchall()
             cur.close()
@@ -222,6 +259,14 @@ def init_task_routes(app, get_connection):
         try:
             ensure_tasks_schema(get_connection)
 
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
+
             data = request.get_json()
 
             if not data:
@@ -231,7 +276,6 @@ def init_task_routes(app, get_connection):
                 }), 400
 
             due_date = parse_due_date(data.get("due_date"))
-            user_id = data.get("user_id")
 
             task = insert_task(
                 get_connection=get_connection,
@@ -240,7 +284,7 @@ def init_task_routes(app, get_connection):
                 status=data.get("status", "pending"),
                 priority=data.get("priority", "medium"),
                 due_date=due_date,
-                user_id=user_id
+                user_id=authenticated_user["id"]
             )
 
             return jsonify({
@@ -256,6 +300,14 @@ def init_task_routes(app, get_connection):
     @task_routes.route("/tasks/<int:task_id>", methods=["PUT"])
     def update_task(task_id):
         try:
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
+
             data = request.get_json()
 
             if not data:
@@ -273,6 +325,7 @@ def init_task_routes(app, get_connection):
             updated_task = update_task_in_db(
                 get_connection=get_connection,
                 task_id=task_id,
+                user_id=authenticated_user["id"],
                 title=data.get("title"),
                 description=data.get("description"),
                 status=data.get("status"),
@@ -302,16 +355,24 @@ def init_task_routes(app, get_connection):
         try:
             ensure_tasks_schema(get_connection)
 
+            authenticated_user = get_authenticated_user(get_connection)
+
+            if not authenticated_user:
+                return jsonify({
+                    "status": "error",
+                    "message": "Authorization token is required"
+                }), 401
+
             conn = get_connection()
             cur = conn.cursor(cursor_factory=RealDictCursor)
 
             cur.execute(
                 """
                 DELETE FROM tasks
-                WHERE id = %s
+                WHERE id = %s AND user_id = %s
                 RETURNING id, title, description, status, priority, due_date, created_at, user_id;
                 """,
-                (task_id,)
+                (task_id, authenticated_user["id"])
             )
             deleted_task = cur.fetchone()
             conn.commit()
