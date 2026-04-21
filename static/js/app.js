@@ -195,6 +195,29 @@ async function loadReminders() {
     renderReminders(data.tasks || [], data.appointments || []);
 }
 
+async function loadAppInfo() {
+    try {
+        const res = await fetch("/app-info");
+        const data = await res.json();
+
+        const aboutBoxes = document.querySelectorAll(".task-item");
+        const aboutBox = aboutBoxes.length > 0 ? aboutBoxes[aboutBoxes.length - 1] : null;
+
+        if (!aboutBox) {
+            return;
+        }
+
+        aboutBox.innerHTML = `
+            <strong>App Name:</strong> ${escapeHtml(data.name || "Personal AI Assistant")}<br>
+            <strong>Version:</strong> ${escapeHtml(data.version || "1.0.0")}<br>
+            <strong>Author:</strong> ${escapeHtml(data.author || "Amin Azimi")}<br>
+            <strong>Description:</strong> ${escapeHtml(data.description || "A smart productivity assistant.")}
+        `;
+    } catch (error) {
+        console.error("Failed to load app info:", error);
+    }
+}
+
 async function createTaskFromMessage(message, dueDateValue) {
     const createRes = await fetch("/tasks", {
         method: "POST",
@@ -365,3 +388,4 @@ if (refreshRemindersButton) {
 loadTasks();
 loadAppointments();
 loadReminders();
+loadAppInfo();
