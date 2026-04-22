@@ -23,6 +23,8 @@ let reminderAutoRefreshIntervalId = null;
 let isLoadingReminders = false;
 let lastReminderSignature = "";
 let shownReminderIds = new Set();
+let reminderAudioContext = null;
+let reminderSoundEnabled = false;
 
 function formatDateForDisplay(value) {
     if (!value) {
@@ -189,23 +191,57 @@ function renderAppointments(appointments) {
     }).join("");
 }
 
-function playReminderSound() {
+function unlockReminderSound() {
     try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+        if (!reminderAudioContext) {
+            reminderAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
 
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
-        gainNode.gain.setValueAtTime(0.001, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.15, audioContext.currentTime + 0.02);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.35);
+        if (reminderAudioContext.state === "suspended") {
+            reminderAudioContext.resume();
+        }
+
+        const oscillator = reminderAudioContext.createOscillator();
+        const gainNode = reminderAudioContext.createGain();
+
+        gainNode.gain.setValueAtTime(0.0001, reminderAudioContext.currentTime);
 
         oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        gainNode.connect(reminderAudioContext.destination);
 
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.35);
+        oscillator.start(reminderAudioContext.currentTime);
+        oscillator.stop(reminderAudioContext.currentTime + 0.01);
+
+        reminderSoundEnabled = true;
+    } catch (error) {
+        console.error("Failed to unlock reminder sound:", error);
+    }
+}
+
+function playReminderSound() {
+    if (!reminderSoundEnabled || !reminderAudioContext) {
+        return;
+    }
+
+    try {
+        if (reminderAudioContext.state === "suspended") {
+            reminderAudioContext.resume();
+        }
+
+        const oscillator = reminderAudioContext.createOscillator();
+        const gainNode = reminderAudioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(880, reminderAudioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.001, reminderAudioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.15, reminderAudioContext.currentTime + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, reminderAudioContext.currentTime + 0.35);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(reminderAudioContext.destination);
+
+        oscillator.start(reminderAudioContext.currentTime);
+        oscillator.stop(reminderAudioContext.currentTime + 0.35);
     } catch (error) {
         console.error("Failed to play reminder sound:", error);
     }
@@ -213,7 +249,37 @@ function playReminderSound() {
 
 function showNotification(message) {
     playReminderSound();
-    alert(message);
+
+    const existingToast = document.getElementById("reminderToast");
+    if (existingToast) {
+        existingToast.remove();
+    }
+
+    const toast = document.createElement("div");
+    toast.id = "reminderToast";
+    toast.className = "reminder-toast";
+    toast.innerHTML = `
+        <div class="reminder-toast-content">
+            <div class="reminder-toast-icon">⏰</div>
+            <div class="reminder-toast-message">${escapeHtml(message)}</div>
+            <button type="button" class="reminder-toast-close" id="reminderToastCloseButton">×</button>
+        </div>
+    `;
+
+    document.body.appendChild(toast);
+
+    const closeButton = document.getElementById("reminderToastCloseButton");
+    if (closeButton) {
+        closeButton.addEventListener("click", function () {
+            toast.remove();
+        });
+    }
+
+    window.setTimeout(() => {
+        if (toast.parentNode) {
+            toast.remove();
+        }
+    }, 5000);
 }
 
 function renderReminders(tasks, appointments) {
@@ -229,7 +295,7 @@ function renderReminders(tasks, appointments) {
             let reminderClassName = "task-item";
 
             if (!shownReminderIds.has(reminderKey)) {
-                showNotification(`⏰ ${task.title}`);
+                showNotification(task.title);
                 shownReminderIds.add(reminderKey);
                 reminderClassName = "task-item reminder-highlight";
             }
@@ -251,7 +317,7 @@ function renderReminders(tasks, appointments) {
             let reminderClassName = "task-item";
 
             if (!shownReminderIds.has(reminderKey)) {
-                showNotification(`📅 ${appointment.title}`);
+                showNotification(appointment.title);
                 shownReminderIds.add(reminderKey);
                 reminderClassName = "task-item reminder-highlight";
             }
@@ -282,18 +348,63 @@ function buildReminderSignature(tasks, appointments) {
     });
 }
 
-function ensureReminderHighlightStyle() {
-    if (document.getElementById("reminderHighlightStyle")) {
+function ensureReminderUiStyle() {
+    if (document.getElementById("reminderUiStyle")) {
         return;
     }
 
     const style = document.createElement("style");
-    style.id = "reminderHighlightStyle";
+    style.id = "reminderUiStyle";
     style.textContent = `
         .reminder-highlight {
-            animation: reminderPulse 1s ease-in-out 4;
+            animation: reminderPulse 1.2s ease-in-out 5;
             box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.35);
             border: 2px solid rgba(255, 193, 7, 0.85);
+            background: rgba(255, 248, 225, 0.95);
+        }
+
+        .reminder-toast {
+            position: fixed;
+            top: 20px;
+            left: 16px;
+            right: 16px;
+            z-index: 9999;
+            animation: reminderToastSlideDown 0.25s ease-out;
+        }
+
+        .reminder-toast-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #ffffff;
+            color: #111827;
+            border-radius: 18px;
+            padding: 16px 18px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.18);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        .reminder-toast-icon {
+            font-size: 28px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .reminder-toast-message {
+            flex: 1;
+            font-size: 18px;
+            font-weight: 700;
+            word-break: break-word;
+        }
+
+        .reminder-toast-close {
+            border: none;
+            background: transparent;
+            color: #2563eb;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            flex-shrink: 0;
         }
 
         @keyframes reminderPulse {
@@ -303,11 +414,22 @@ function ensureReminderHighlightStyle() {
             }
             50% {
                 transform: scale(1.02);
-                box-shadow: 0 0 0 8px rgba(255, 193, 7, 0.12);
+                box-shadow: 0 0 0 10px rgba(255, 193, 7, 0.14);
             }
             100% {
                 transform: scale(1);
                 box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+            }
+        }
+
+        @keyframes reminderToastSlideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
         }
     `;
@@ -597,6 +719,8 @@ async function sendMessage() {
 
     statusText.textContent = "Sending...";
 
+    unlockReminderSound();
+
     const res = await authorizedFetch(`/smart-ai-browser?message=${encodeURIComponent(message)}`);
     const data = await res.json();
 
@@ -667,6 +791,8 @@ async function sendMessage() {
 }
 
 async function updateTask(id, status) {
+    unlockReminderSound();
+
     await authorizedFetch(`/tasks/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -683,6 +809,8 @@ async function deleteTask(id) {
         return;
     }
 
+    unlockReminderSound();
+
     await authorizedFetch(`/tasks/${id}`, {
         method: "DELETE"
     });
@@ -698,6 +826,7 @@ if (sendButton) {
 
 if (refreshTasksButton) {
     refreshTasksButton.addEventListener("click", function () {
+        unlockReminderSound();
         loadTasks();
         loadAppointments();
         loadReminders();
@@ -706,20 +835,30 @@ if (refreshTasksButton) {
 
 if (refreshRemindersButton) {
     refreshRemindersButton.addEventListener("click", function () {
+        unlockReminderSound();
         loadReminders();
     });
 }
 
 if (signupButton) {
-    signupButton.addEventListener("click", signup);
+    signupButton.addEventListener("click", function () {
+        unlockReminderSound();
+        signup();
+    });
 }
 
 if (loginButton) {
-    loginButton.addEventListener("click", login);
+    loginButton.addEventListener("click", function () {
+        unlockReminderSound();
+        login();
+    });
 }
 
 if (logoutButton) {
-    logoutButton.addEventListener("click", logout);
+    logoutButton.addEventListener("click", function () {
+        unlockReminderSound();
+        logout();
+    });
 }
 
 document.addEventListener("visibilitychange", function () {
@@ -734,7 +873,7 @@ document.addEventListener("visibilitychange", function () {
     }
 });
 
-ensureReminderHighlightStyle();
+ensureReminderUiStyle();
 updateLoggedInUiState();
 
 if (getAuthToken()) {
