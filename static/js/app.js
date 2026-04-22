@@ -22,6 +22,7 @@ const AUTO_REMINDER_INTERVAL_MS = 30000;
 let reminderAutoRefreshIntervalId = null;
 let isLoadingReminders = false;
 let lastReminderSignature = "";
+let shownReminderIds = new Set();
 
 function formatDateForDisplay(value) {
     if (!value) {
@@ -119,6 +120,7 @@ async function authorizedFetch(url, options = {}) {
     if (response.status === 401) {
         clearAuthToken();
         stopReminderAutoRefresh();
+        shownReminderIds = new Set();
         updateAuthStatus("Please login again");
 
         if (statusText) {
@@ -187,6 +189,10 @@ function renderAppointments(appointments) {
     }).join("");
 }
 
+function showNotification(message) {
+    alert(message);
+}
+
 function renderReminders(tasks, appointments) {
     if (!remindersList) {
         return;
@@ -196,6 +202,13 @@ function renderReminders(tasks, appointments) {
 
     if (Array.isArray(tasks)) {
         tasks.forEach(task => {
+            const reminderKey = `task-${task.id}`;
+
+            if (!shownReminderIds.has(reminderKey)) {
+                showNotification(`⏰ ${task.title}`);
+                shownReminderIds.add(reminderKey);
+            }
+
             reminderItems.push(`
                 <div class="task-item">
                     <strong>Task reminder</strong><br>
@@ -209,6 +222,13 @@ function renderReminders(tasks, appointments) {
 
     if (Array.isArray(appointments)) {
         appointments.forEach(appointment => {
+            const reminderKey = `appointment-${appointment.id}`;
+
+            if (!shownReminderIds.has(reminderKey)) {
+                showNotification(`📅 ${appointment.title}`);
+                shownReminderIds.add(reminderKey);
+            }
+
             reminderItems.push(`
                 <div class="task-item">
                     <strong>Appointment reminder</strong><br>
@@ -446,6 +466,7 @@ async function logout() {
     clearAuthToken();
     stopReminderAutoRefresh();
     lastReminderSignature = "";
+    shownReminderIds = new Set();
     updateAuthStatus("Logged out");
 
     if (tasksList) {
