@@ -189,7 +189,30 @@ function renderAppointments(appointments) {
     }).join("");
 }
 
+function playReminderSound() {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.001, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.15, audioContext.currentTime + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.35);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.35);
+    } catch (error) {
+        console.error("Failed to play reminder sound:", error);
+    }
+}
+
 function showNotification(message) {
+    playReminderSound();
     alert(message);
 }
 
@@ -203,14 +226,16 @@ function renderReminders(tasks, appointments) {
     if (Array.isArray(tasks)) {
         tasks.forEach(task => {
             const reminderKey = `task-${task.id}`;
+            let reminderClassName = "task-item";
 
             if (!shownReminderIds.has(reminderKey)) {
                 showNotification(`⏰ ${task.title}`);
                 shownReminderIds.add(reminderKey);
+                reminderClassName = "task-item reminder-highlight";
             }
 
             reminderItems.push(`
-                <div class="task-item">
+                <div class="${reminderClassName}">
                     <strong>Task reminder</strong><br>
                     Title: ${escapeHtml(task.title)}<br>
                     Due date: ${escapeHtml(formatDateForDisplay(task.due_date))}<br>
@@ -223,14 +248,16 @@ function renderReminders(tasks, appointments) {
     if (Array.isArray(appointments)) {
         appointments.forEach(appointment => {
             const reminderKey = `appointment-${appointment.id}`;
+            let reminderClassName = "task-item";
 
             if (!shownReminderIds.has(reminderKey)) {
                 showNotification(`📅 ${appointment.title}`);
                 shownReminderIds.add(reminderKey);
+                reminderClassName = "task-item reminder-highlight";
             }
 
             reminderItems.push(`
-                <div class="task-item">
+                <div class="${reminderClassName}">
                     <strong>Appointment reminder</strong><br>
                     Title: ${escapeHtml(appointment.title)}<br>
                     Time: ${escapeHtml(formatAppointmentTimeForDisplay(appointment.appointment_time))}<br>
@@ -253,6 +280,38 @@ function buildReminderSignature(tasks, appointments) {
         tasks: Array.isArray(tasks) ? tasks : [],
         appointments: Array.isArray(appointments) ? appointments : []
     });
+}
+
+function ensureReminderHighlightStyle() {
+    if (document.getElementById("reminderHighlightStyle")) {
+        return;
+    }
+
+    const style = document.createElement("style");
+    style.id = "reminderHighlightStyle";
+    style.textContent = `
+        .reminder-highlight {
+            animation: reminderPulse 1s ease-in-out 4;
+            box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.35);
+            border: 2px solid rgba(255, 193, 7, 0.85);
+        }
+
+        @keyframes reminderPulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.55);
+            }
+            50% {
+                transform: scale(1.02);
+                box-shadow: 0 0 0 8px rgba(255, 193, 7, 0.12);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+            }
+        }
+    `;
+    document.head.appendChild(style);
 }
 
 function startReminderAutoRefresh() {
@@ -675,6 +734,7 @@ document.addEventListener("visibilitychange", function () {
     }
 });
 
+ensureReminderHighlightStyle();
 updateLoggedInUiState();
 
 if (getAuthToken()) {
