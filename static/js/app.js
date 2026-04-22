@@ -17,6 +17,11 @@ const logoutButton = document.getElementById("logoutButton");
 const authStatusText = document.getElementById("authStatusText");
 
 const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
+const AUTO_REMINDER_INTERVAL_MS = 30000;
+
+let reminderAutoRefreshIntervalId = null;
+let isLoadingReminders = false;
+let lastReminderSignature = "";
 
 function formatDateForDisplay(value) {
     if (!value) {
@@ -113,6 +118,7 @@ async function authorizedFetch(url, options = {}) {
 
     if (response.status === 401) {
         clearAuthToken();
+        stopReminderAutoRefresh();
         updateAuthStatus("Please login again");
 
         if (statusText) {
@@ -222,6 +228,34 @@ function renderReminders(tasks, appointments) {
     remindersList.innerHTML = reminderItems.join("");
 }
 
+function buildReminderSignature(tasks, appointments) {
+    return JSON.stringify({
+        tasks: Array.isArray(tasks) ? tasks : [],
+        appointments: Array.isArray(appointments) ? appointments : []
+    });
+}
+
+function startReminderAutoRefresh() {
+    if (!getAuthToken()) {
+        return;
+    }
+
+    if (reminderAutoRefreshIntervalId) {
+        return;
+    }
+
+    reminderAutoRefreshIntervalId = window.setInterval(() => {
+        loadReminders({ silent: true });
+    }, AUTO_REMINDER_INTERVAL_MS);
+}
+
+function stopReminderAutoRefresh() {
+    if (reminderAutoRefreshIntervalId) {
+        window.clearInterval(reminderAutoRefreshIntervalId);
+        reminderAutoRefreshIntervalId = null;
+    }
+}
+
 async function loadTasks() {
     if (!tasksList) {
         return;
@@ -258,22 +292,49 @@ async function loadAppointments() {
     renderAppointments(data.appointments);
 }
 
-async function loadReminders() {
+async function loadReminders(options = {}) {
+    const { silent = false } = options;
+
     if (!remindersList) {
         return;
     }
 
-    remindersList.innerHTML = `<div class="loading">Loading reminders...</div>`;
-
-    const res = await authorizedFetch("/reminders");
-    const data = await res.json();
-
-    if (data.status !== "success") {
-        remindersList.innerHTML = `<div class="loading">Could not load reminders.</div>`;
+    if (!getAuthToken()) {
+        remindersList.innerHTML = `<div class="loading">No reminders right now.</div>`;
         return;
     }
 
-    renderReminders(data.tasks || [], data.appointments || []);
+    if (isLoadingReminders) {
+        return;
+    }
+
+    isLoadingReminders = true;
+
+    if (!silent) {
+        remindersList.innerHTML = `<div class="loading">Loading reminders...</div>`;
+    }
+
+    try {
+        const res = await authorizedFetch("/reminders");
+        const data = await res.json();
+
+        if (data.status !== "success") {
+            remindersList.innerHTML = `<div class="loading">Could not load reminders.</div>`;
+            return;
+        }
+
+        const tasks = data.tasks || [];
+        const appointments = data.appointments || [];
+        const nextSignature = buildReminderSignature(tasks, appointments);
+
+        lastReminderSignature = nextSignature;
+        renderReminders(tasks, appointments);
+    } catch (error) {
+        console.error("Failed to load reminders:", error);
+        remindersList.innerHTML = `<div class="loading">Could not load reminders.</div>`;
+    } finally {
+        isLoadingReminders = false;
+    }
 }
 
 async function loadAppInfo() {
@@ -322,6 +383,7 @@ async function signup() {
         if (data.status === "success" && data.user && data.user.auth_token) {
             setAuthToken(data.user.auth_token);
             updateAuthStatus("Signup successful and logged in");
+            startReminderAutoRefresh();
             loadTasks();
             loadAppointments();
             loadReminders();
@@ -358,6 +420,7 @@ async function login() {
         if (data.status === "success" && data.user && data.user.auth_token) {
             setAuthToken(data.user.auth_token);
             updateAuthStatus("Logged in");
+            startReminderAutoRefresh();
             loadTasks();
             loadAppointments();
             loadReminders();
@@ -381,6 +444,8 @@ async function logout() {
     }
 
     clearAuthToken();
+    stopReminderAutoRefresh();
+    lastReminderSignature = "";
     updateAuthStatus("Logged out");
 
     if (tasksList) {
@@ -560,7 +625,9 @@ if (refreshTasksButton) {
 }
 
 if (refreshRemindersButton) {
-    refreshRemindersButton.addEventListener("click", loadReminders);
+    refreshRemindersButton.addEventListener("click", function () {
+        loadReminders();
+    });
 }
 
 if (signupButton) {
@@ -575,7 +642,24 @@ if (logoutButton) {
     logoutButton.addEventListener("click", logout);
 }
 
+document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+        stopReminderAutoRefresh();
+        return;
+    }
+
+    if (getAuthToken()) {
+        loadReminders({ silent: true });
+        startReminderAutoRefresh();
+    }
+});
+
 updateLoggedInUiState();
+
+if (getAuthToken()) {
+    startReminderAutoRefresh();
+}
+
 loadTasks();
 loadAppointments();
 loadReminders();
