@@ -1,5 +1,6 @@
 import os
 import json
+from datetime import datetime
 from openai import OpenAI
 
 
@@ -57,9 +58,13 @@ def generate_ai_reply(user_message):
 
 def extract_task_from_message(user_message):
     client = get_openai_client()
+    current_datetime = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
 
     prompt = f"""
 You are a task extraction assistant.
+
+Current datetime (UTC):
+{current_datetime}
 
 Read the user's message and extract one actionable task.
 
@@ -78,7 +83,8 @@ Rules:
 - status must always be "pending".
 - priority must be one of: low, medium, high.
 - If description is not needed, return an empty string.
-- If the message contains time/date (e.g. tomorrow, next week, 6pm), convert it to ISO format (YYYY-MM-DDTHH:MM:SS).
+- If the message contains time/date (e.g. tomorrow, next week, 6pm), convert it to ISO format (YYYY-MM-DDTHH:MM:SS) relative to the current datetime above.
+- Never return a past year if the user is talking about tomorrow, next week, or a future reminder.
 - If no date is found, return null.
 - Do not add markdown.
 - Do not add explanation.
@@ -131,9 +137,13 @@ User message:
 
 def decide_smart_action(user_message):
     client = get_openai_client()
+    current_datetime = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
 
     prompt = f"""
 You are a smart personal productivity assistant.
+
+Current datetime (UTC):
+{current_datetime}
 
 Your job is to decide whether the user's message should:
 1. create a task
@@ -160,6 +170,7 @@ Rules:
   - priority must be low, medium, or high
   - status must be pending
   - due_date should be ISO datetime string if a date/time exists, otherwise null
+  - due_date must be calculated relative to the current datetime above
   - reply should be empty
 - If action is "reply":
   - fill reply
