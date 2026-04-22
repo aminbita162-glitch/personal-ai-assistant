@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 
+from services.auth_service import get_current_user
 from services.reminder_service import (
     build_reminder_window,
     build_reminders_payload
@@ -22,7 +23,8 @@ def ensure_tasks_schema(get_connection):
             status TEXT NOT NULL DEFAULT 'pending',
             priority TEXT NOT NULL DEFAULT 'medium',
             due_date TIMESTAMP NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER
         );
         """
     )
@@ -38,6 +40,13 @@ def ensure_tasks_schema(get_connection):
         """
         ALTER TABLE tasks
         ADD COLUMN IF NOT EXISTS due_date TIMESTAMP NULL;
+        """
+    )
+
+    cur.execute(
+        """
+        ALTER TABLE tasks
+        ADD COLUMN IF NOT EXISTS user_id INTEGER;
         """
     )
 
@@ -59,7 +68,8 @@ def ensure_appointments_schema(get_connection):
             appointment_time TIMESTAMP NOT NULL,
             location TEXT,
             status TEXT NOT NULL DEFAULT 'scheduled',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER
         );
         """
     )
@@ -85,6 +95,13 @@ def ensure_appointments_schema(get_connection):
         """
     )
 
+    cur.execute(
+        """
+        ALTER TABLE appointments
+        ADD COLUMN IF NOT EXISTS user_id INTEGER;
+        """
+    )
+
     conn.commit()
     cur.close()
     conn.close()
@@ -97,6 +114,10 @@ def init_reminder_routes(app, get_connection):
             ensure_tasks_schema(get_connection)
             ensure_appointments_schema(get_connection)
 
+            current_user, error_response, status_code = get_current_user(get_connection)
+            if error_response:
+                return jsonify(error_response), status_code
+
             reminder_window = build_reminder_window(hours=1)
             current_time = reminder_window["current_time"]
             end_time = reminder_window["end_time"]
@@ -108,13 +129,14 @@ def init_reminder_routes(app, get_connection):
                 """
                 SELECT id, title, due_date, status
                 FROM tasks
-                WHERE due_date IS NOT NULL
+                WHERE user_id = %s
+                  AND due_date IS NOT NULL
                   AND due_date >= %s
                   AND due_date <= %s
                   AND status = 'pending'
                 ORDER BY due_date ASC;
                 """,
-                (current_time, end_time)
+                (current_user["id"], current_time, end_time)
             )
             task_rows = cur.fetchall()
 
@@ -122,12 +144,13 @@ def init_reminder_routes(app, get_connection):
                 """
                 SELECT id, title, appointment_time, status
                 FROM appointments
-                WHERE appointment_time >= %s
+                WHERE user_id = %s
+                  AND appointment_time >= %s
                   AND appointment_time <= %s
                   AND status = 'scheduled'
                 ORDER BY appointment_time ASC;
                 """,
-                (current_time, end_time)
+                (current_user["id"], current_time, end_time)
             )
             appointment_rows = cur.fetchall()
 
