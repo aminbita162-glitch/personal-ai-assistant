@@ -1,10 +1,5 @@
 from flask import Blueprint, jsonify, request
 
-from services.ai_service import (
-    decide_smart_action,
-    extract_task_from_message,
-    generate_ai_reply
-)
 from services.auth_service import get_current_user
 from services.task_service import build_task_payload, serialize_task
 
@@ -119,6 +114,8 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/ai", methods=["POST"])
     def ai_chat():
         try:
+            from services.ai_service import generate_ai_reply
+
             data = request.get_json()
 
             if not data:
@@ -150,6 +147,8 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/ai-browser")
     def ai_browser():
         try:
+            from services.ai_service import generate_ai_reply
+
             message = request.args.get("message", "").strip()
 
             if not message:
@@ -173,6 +172,8 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/ai-to-task", methods=["POST"])
     def ai_to_task():
         try:
+            from services.ai_service import extract_task_from_message
+
             current_user, error_response, status_code = get_current_user(get_connection)
             if error_response:
                 return jsonify(error_response), status_code
@@ -219,6 +220,8 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/ai-to-task-browser")
     def ai_to_task_browser():
         try:
+            from services.ai_service import extract_task_from_message
+
             current_user, error_response, status_code = get_current_user(get_connection)
             if error_response:
                 return jsonify(error_response), status_code
@@ -257,6 +260,8 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/smart-ai", methods=["POST"])
     def smart_ai():
         try:
+            from services.ai_service import decide_smart_action
+
             current_user, error_response, status_code = get_current_user(get_connection)
             if error_response:
                 return jsonify(error_response), status_code
@@ -311,6 +316,8 @@ def init_ai_routes(app, get_connection):
     @ai_routes.route("/smart-ai-browser")
     def smart_ai_browser():
         try:
+            from services.ai_service import decide_smart_action
+
             current_user, error_response, status_code = get_current_user(get_connection)
             if error_response:
                 return jsonify(error_response), status_code
