@@ -71,7 +71,7 @@ Read the user's message and extract one actionable task.
 Return ONLY valid JSON in this exact format:
 {{
   "title": "task title",
-  "description": "short optional description or empty string",
+  "description": "full user intent as natural sentence",
   "priority": "low or medium or high",
   "status": "pending",
   "due_date": "ISO datetime string or null"
@@ -79,12 +79,13 @@ Return ONLY valid JSON in this exact format:
 
 Rules:
 - Return only JSON.
-- Keep the title short and clear.
-- status must always be "pending".
+- Title must be short (2-4 words).
+- Description MUST contain the full original intent of the user.
+- Description MUST NOT be empty.
+- If user says time/date → include it in description AND convert to due_date.
 - priority must be one of: low, medium, high.
-- If description is not needed, return an empty string.
-- If the message contains time/date (e.g. tomorrow, next week, 6pm), convert it to ISO format (YYYY-MM-DDTHH:MM:SS) relative to the current datetime above.
-- Never return a past year if the user is talking about tomorrow, next week, or a future reminder.
+- status must always be "pending".
+- If the message contains time/date (e.g. tomorrow, next week, 6pm), convert it to ISO format relative to current datetime.
 - If no date is found, return null.
 - Do not add markdown.
 - Do not add explanation.
@@ -95,12 +96,7 @@ User message:
 
     response = client.chat.completions.create(
         model="gpt-4.1-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
+        messages=[{"role": "user", "content": prompt}]
     )
 
     raw_text = get_response_text(response)
@@ -119,6 +115,9 @@ User message:
 
     if not title:
         raise ValueError("AI did not return a task title")
+
+    if not description:
+        description = user_message.strip()
 
     if priority not in ["low", "medium", "high"]:
         priority = "medium"
@@ -140,46 +139,26 @@ def decide_smart_action(user_message):
     current_datetime = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
 
     prompt = f"""
-You are a smart personal productivity assistant.
+You are a smart productivity assistant.
 
 Current datetime (UTC):
 {current_datetime}
 
-Your job is to decide whether the user's message should:
-1. create a task
-2. or receive a normal assistant reply
-
-Return ONLY valid JSON in this exact format:
+Return ONLY JSON:
 {{
   "action": "task" or "reply",
   "title": "",
   "description": "",
-  "priority": "low or medium or high",
+  "priority": "low|medium|high",
   "status": "pending",
   "due_date": "ISO datetime string or null",
   "reply": ""
 }}
 
 Rules:
-- Return only JSON.
-- If the user is asking to remember, do, add, remind, schedule, track, or note an actionable item, choose "task".
-- If the user is asking for advice, planning, explanation, or conversation, choose "reply".
-- If action is "task":
-  - fill title
-  - description can be empty
-  - priority must be low, medium, or high
-  - status must be pending
-  - due_date should be ISO datetime string if a date/time exists, otherwise null
-  - due_date must be calculated relative to the current datetime above
-  - reply should be empty
-- If action is "reply":
-  - fill reply
-  - title and description should be empty
-  - priority should be medium
-  - status should be pending
-  - due_date should be null
-- Do not add markdown.
-- Do not add explanation outside JSON.
+- If task → description MUST contain full user message
+- If reply → due_date must be null
+- No markdown
 
 User message:
 {user_message}
@@ -187,12 +166,7 @@ User message:
 
     response = client.chat.completions.create(
         model="gpt-4.1-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
+        messages=[{"role": "user", "content": prompt}]
     )
 
     raw_text = get_response_text(response)
@@ -211,17 +185,8 @@ User message:
     due_date = parsed.get("due_date", None)
     reply = str(parsed.get("reply", "")).strip()
 
-    if action not in ["task", "reply"]:
-        action = "reply"
-
-    if priority not in ["low", "medium", "high"]:
-        priority = "medium"
-
-    if status not in ["pending", "done"]:
-        status = "pending"
-
-    if action == "task" and not title:
-        raise ValueError("AI decided task but did not return a title")
+    if action == "task" and not description:
+        description = user_message.strip()
 
     if action == "reply":
         due_date = None
