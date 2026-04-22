@@ -4,7 +4,7 @@ import psycopg2
 
 from routes.task_routes import init_task_routes, ensure_tasks_schema
 from routes.calendar_routes import init_calendar_routes, ensure_appointments_schema
-# from routes.reminder_routes import init_reminder_routes
+from routes.reminder_routes import init_reminder_routes
 from routes.ai_routes import init_ai_routes
 from routes.user_routes import init_user_routes
 from services.user_service import create_user_table
@@ -111,6 +111,6 @@ def initialize_database():
 
 init_task_routes(app, get_connection)
 init_calendar_routes(app, get_connection)
+init_reminder_routes(app, get_connection)
 init_ai_routes(app, get_connection)
-# init_reminder_routes(app, get_connection)
 init_user_routes(app, get_connection)
