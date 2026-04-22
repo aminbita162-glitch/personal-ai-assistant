@@ -202,7 +202,7 @@ def init_ai_routes(app, get_connection):
                 description=extracted_task["description"],
                 status=extracted_task["status"],
                 priority=extracted_task["priority"],
-                due_date=None,
+                due_date=extracted_task.get("due_date"),
                 user_id=current_user["id"]
             )
 
@@ -242,7 +242,7 @@ def init_ai_routes(app, get_connection):
                 description=extracted_task["description"],
                 status=extracted_task["status"],
                 priority=extracted_task["priority"],
-                due_date=None,
+                due_date=extracted_task.get("due_date"),
                 user_id=current_user["id"]
             )
 
@@ -291,7 +291,7 @@ def init_ai_routes(app, get_connection):
                     description=decision["description"],
                     status=decision["status"],
                     priority=decision["priority"],
-                    due_date=None,
+                    due_date=decision.get("due_date"),
                     user_id=current_user["id"]
                 )
 
@@ -339,7 +339,7 @@ def init_ai_routes(app, get_connection):
                     description=decision["description"],
                     status=decision["status"],
                     priority=decision["priority"],
-                    due_date=None,
+                    due_date=decision.get("due_date"),
                     user_id=current_user["id"]
                 )
 
