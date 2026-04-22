@@ -192,6 +192,59 @@ function renderAppointments(appointments) {
     }).join("");
 }
 
+function supportsBrowserNotifications() {
+    return typeof window !== "undefined" && "Notification" in window;
+}
+
+async function ensureBrowserNotificationPermission() {
+    if (!supportsBrowserNotifications()) {
+        return "unsupported";
+    }
+
+    if (Notification.permission === "granted") {
+        return "granted";
+    }
+
+    if (Notification.permission === "denied") {
+        return "denied";
+    }
+
+    try {
+        return await Notification.requestPermission();
+    } catch (error) {
+        console.error("Failed to request notification permission:", error);
+        return "error";
+    }
+}
+
+function showBrowserNotification(message) {
+    if (!supportsBrowserNotifications()) {
+        return;
+    }
+
+    if (Notification.permission !== "granted") {
+        return;
+    }
+
+    try {
+        const notification = new Notification("Reminder", {
+            body: message,
+            tag: `reminder-${message}`,
+            renotify: true
+        });
+
+        window.setTimeout(() => {
+            try {
+                notification.close();
+            } catch (error) {
+                console.error("Failed to close browser notification:", error);
+            }
+        }, 5000);
+    } catch (error) {
+        console.error("Failed to show browser notification:", error);
+    }
+}
+
 async function unlockReminderSound() {
     try {
         if (!reminderAudioContext) {
@@ -282,6 +335,7 @@ async function playReminderSound() {
 
 async function showNotification(message) {
     await playReminderSound();
+    showBrowserNotification(message);
 
     const existingToast = document.getElementById("reminderToast");
     if (existingToast) {
@@ -762,6 +816,7 @@ async function sendMessage() {
     statusText.textContent = "Sending...";
 
     await unlockReminderSound();
+    await ensureBrowserNotificationPermission();
 
     const res = await authorizedFetch(`/smart-ai-browser?message=${encodeURIComponent(message)}`);
     const data = await res.json();
@@ -834,6 +889,7 @@ async function sendMessage() {
 
 async function updateTask(id, status) {
     await unlockReminderSound();
+    await ensureBrowserNotificationPermission();
 
     await authorizedFetch(`/tasks/${id}`, {
         method: "PUT",
@@ -852,6 +908,7 @@ async function deleteTask(id) {
     }
 
     await unlockReminderSound();
+    await ensureBrowserNotificationPermission();
 
     await authorizedFetch(`/tasks/${id}`, {
         method: "DELETE"
@@ -869,6 +926,7 @@ if (sendButton) {
 if (refreshTasksButton) {
     refreshTasksButton.addEventListener("click", async function () {
         await unlockReminderSound();
+        await ensureBrowserNotificationPermission();
         loadTasks();
         loadAppointments();
         loadReminders();
@@ -878,6 +936,7 @@ if (refreshTasksButton) {
 if (refreshRemindersButton) {
     refreshRemindersButton.addEventListener("click", async function () {
         await unlockReminderSound();
+        await ensureBrowserNotificationPermission();
         loadReminders();
     });
 }
@@ -885,6 +944,7 @@ if (refreshRemindersButton) {
 if (signupButton) {
     signupButton.addEventListener("click", async function () {
         await unlockReminderSound();
+        await ensureBrowserNotificationPermission();
         signup();
     });
 }
@@ -892,6 +952,7 @@ if (signupButton) {
 if (loginButton) {
     loginButton.addEventListener("click", async function () {
         await unlockReminderSound();
+        await ensureBrowserNotificationPermission();
         login();
     });
 }
@@ -899,6 +960,7 @@ if (loginButton) {
 if (logoutButton) {
     logoutButton.addEventListener("click", async function () {
         await unlockReminderSound();
+        await ensureBrowserNotificationPermission();
         logout();
     });
 }
