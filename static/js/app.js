@@ -25,6 +25,7 @@ let lastReminderSignature = "";
 let shownReminderIds = new Set();
 let reminderAudioContext = null;
 let reminderSoundEnabled = false;
+let reminderSoundUnlockListenersInstalled = false;
 
 function formatDateForDisplay(value) {
     if (!value) {
@@ -191,26 +192,30 @@ function renderAppointments(appointments) {
     }).join("");
 }
 
-function unlockReminderSound() {
+async function unlockReminderSound() {
     try {
         if (!reminderAudioContext) {
             reminderAudioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
 
         if (reminderAudioContext.state === "suspended") {
-            reminderAudioContext.resume();
+            await reminderAudioContext.resume();
         }
 
         const oscillator = reminderAudioContext.createOscillator();
         const gainNode = reminderAudioContext.createGain();
 
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(440, reminderAudioContext.currentTime);
         gainNode.gain.setValueAtTime(0.0001, reminderAudioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, reminderAudioContext.currentTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, reminderAudioContext.currentTime + 0.03);
 
         oscillator.connect(gainNode);
         gainNode.connect(reminderAudioContext.destination);
 
         oscillator.start(reminderAudioContext.currentTime);
-        oscillator.stop(reminderAudioContext.currentTime + 0.01);
+        oscillator.stop(reminderAudioContext.currentTime + 0.03);
 
         reminderSoundEnabled = true;
     } catch (error) {
@@ -218,14 +223,42 @@ function unlockReminderSound() {
     }
 }
 
-function playReminderSound() {
-    if (!reminderSoundEnabled || !reminderAudioContext) {
+function installReminderSoundUnlockListeners() {
+    if (reminderSoundUnlockListenersInstalled) {
+        return;
+    }
+
+    const unlockOnce = async function () {
+        await unlockReminderSound();
+
+        if (reminderSoundEnabled) {
+            document.removeEventListener("touchstart", unlockOnce);
+            document.removeEventListener("touchend", unlockOnce);
+            document.removeEventListener("click", unlockOnce);
+            document.removeEventListener("keydown", unlockOnce);
+        }
+    };
+
+    document.addEventListener("touchstart", unlockOnce, { passive: true });
+    document.addEventListener("touchend", unlockOnce, { passive: true });
+    document.addEventListener("click", unlockOnce);
+    document.addEventListener("keydown", unlockOnce);
+
+    reminderSoundUnlockListenersInstalled = true;
+}
+
+async function playReminderSound() {
+    if (!reminderSoundEnabled) {
         return;
     }
 
     try {
+        if (!reminderAudioContext) {
+            reminderAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
         if (reminderAudioContext.state === "suspended") {
-            reminderAudioContext.resume();
+            await reminderAudioContext.resume();
         }
 
         const oscillator = reminderAudioContext.createOscillator();
@@ -234,21 +267,21 @@ function playReminderSound() {
         oscillator.type = "sine";
         oscillator.frequency.setValueAtTime(880, reminderAudioContext.currentTime);
         gainNode.gain.setValueAtTime(0.001, reminderAudioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.15, reminderAudioContext.currentTime + 0.02);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, reminderAudioContext.currentTime + 0.35);
+        gainNode.gain.exponentialRampToValueAtTime(0.12, reminderAudioContext.currentTime + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, reminderAudioContext.currentTime + 0.28);
 
         oscillator.connect(gainNode);
         gainNode.connect(reminderAudioContext.destination);
 
         oscillator.start(reminderAudioContext.currentTime);
-        oscillator.stop(reminderAudioContext.currentTime + 0.35);
+        oscillator.stop(reminderAudioContext.currentTime + 0.28);
     } catch (error) {
         console.error("Failed to play reminder sound:", error);
     }
 }
 
-function showNotification(message) {
-    playReminderSound();
+async function showNotification(message) {
+    await playReminderSound();
 
     const existingToast = document.getElementById("reminderToast");
     if (existingToast) {
@@ -360,7 +393,7 @@ function ensureReminderUiStyle() {
             animation: reminderPulse 1.2s ease-in-out 5;
             box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.35);
             border: 2px solid rgba(255, 193, 7, 0.85);
-            background: rgba(255, 248, 225, 0.95);
+            background: rgba(255, 248, 225, 0.98);
         }
 
         .reminder-toast {
@@ -376,6 +409,8 @@ function ensureReminderUiStyle() {
             display: flex;
             align-items: center;
             gap: 12px;
+            width: 100%;
+            box-sizing: border-box;
             background: #ffffff;
             color: #111827;
             border-radius: 18px;
@@ -387,24 +422,31 @@ function ensureReminderUiStyle() {
         .reminder-toast-icon {
             font-size: 28px;
             line-height: 1;
-            flex-shrink: 0;
+            flex: 0 0 auto;
         }
 
         .reminder-toast-message {
-            flex: 1;
+            flex: 1 1 auto;
+            min-width: 0;
             font-size: 18px;
             font-weight: 700;
-            word-break: break-word;
+            line-height: 1.35;
+            white-space: normal;
+            word-break: normal;
+            overflow-wrap: anywhere;
         }
 
         .reminder-toast-close {
+            margin-left: auto;
             border: none;
             background: transparent;
             color: #2563eb;
-            font-size: 18px;
+            font-size: 28px;
+            line-height: 1;
             font-weight: 700;
             cursor: pointer;
-            flex-shrink: 0;
+            flex: 0 0 auto;
+            padding: 0;
         }
 
         @keyframes reminderPulse {
@@ -719,7 +761,7 @@ async function sendMessage() {
 
     statusText.textContent = "Sending...";
 
-    unlockReminderSound();
+    await unlockReminderSound();
 
     const res = await authorizedFetch(`/smart-ai-browser?message=${encodeURIComponent(message)}`);
     const data = await res.json();
@@ -791,7 +833,7 @@ async function sendMessage() {
 }
 
 async function updateTask(id, status) {
-    unlockReminderSound();
+    await unlockReminderSound();
 
     await authorizedFetch(`/tasks/${id}`, {
         method: "PUT",
@@ -809,7 +851,7 @@ async function deleteTask(id) {
         return;
     }
 
-    unlockReminderSound();
+    await unlockReminderSound();
 
     await authorizedFetch(`/tasks/${id}`, {
         method: "DELETE"
@@ -825,8 +867,8 @@ if (sendButton) {
 }
 
 if (refreshTasksButton) {
-    refreshTasksButton.addEventListener("click", function () {
-        unlockReminderSound();
+    refreshTasksButton.addEventListener("click", async function () {
+        await unlockReminderSound();
         loadTasks();
         loadAppointments();
         loadReminders();
@@ -834,29 +876,29 @@ if (refreshTasksButton) {
 }
 
 if (refreshRemindersButton) {
-    refreshRemindersButton.addEventListener("click", function () {
-        unlockReminderSound();
+    refreshRemindersButton.addEventListener("click", async function () {
+        await unlockReminderSound();
         loadReminders();
     });
 }
 
 if (signupButton) {
-    signupButton.addEventListener("click", function () {
-        unlockReminderSound();
+    signupButton.addEventListener("click", async function () {
+        await unlockReminderSound();
         signup();
     });
 }
 
 if (loginButton) {
-    loginButton.addEventListener("click", function () {
-        unlockReminderSound();
+    loginButton.addEventListener("click", async function () {
+        await unlockReminderSound();
         login();
     });
 }
 
 if (logoutButton) {
-    logoutButton.addEventListener("click", function () {
-        unlockReminderSound();
+    logoutButton.addEventListener("click", async function () {
+        await unlockReminderSound();
         logout();
     });
 }
@@ -874,6 +916,7 @@ document.addEventListener("visibilitychange", function () {
 });
 
 ensureReminderUiStyle();
+installReminderSoundUnlockListeners();
 updateLoggedInUiState();
 
 if (getAuthToken()) {
