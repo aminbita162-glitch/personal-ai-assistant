@@ -687,9 +687,7 @@ async function reverseGeocode(latitude, longitude) {
     const data = await response.json();
     const address = data.address || {};
 
-    const country =
-        address.country ||
-        "Unknown";
+    const country = address.country || "Unknown";
 
     const city =
         address.city ||
