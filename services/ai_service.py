@@ -261,10 +261,103 @@ User message:
     }
 
 
+def message_has_explicit_task_intent(user_message):
+    text = str(user_message or "").strip().lower()
+
+    explicit_task_patterns = [
+        r"\bremind me\b",
+        r"\bremember to\b",
+        r"\badd a task\b",
+        r"\bcreate a task\b",
+        r"\bschedule\b",
+        r"\bset a reminder\b",
+        r"\bmake a reminder\b",
+        r"\bi need to\b",
+        r"\bi have to\b",
+        r"\btodo\b",
+        r"\bto-do\b",
+        r"\bcall .* tomorrow\b",
+        r"\bcall .* at \d",
+        r"\bmeeting .* tomorrow\b",
+        r"\bappointment .* tomorrow\b",
+        r"یادم بنداز",
+        r"یادم بندار",
+        r"یادآوری کن",
+        r"یادآوری",
+        r"برام یادداشت کن",
+        r"تسک بساز",
+        r"کار بساز",
+        r"ثبت کن",
+        r"برنامه بذار",
+        r"نوبت .* دارم",
+        r"فردا .* برم",
+        r"فردا .* زنگ بزنم",
+        r"ساعت \d",
+        r"ساعت [۰-۹]",
+    ]
+
+    return any(re.search(pattern, text) for pattern in explicit_task_patterns)
+
+
+def message_is_vague_or_non_committal(user_message):
+    text = str(user_message or "").strip().lower()
+
+    vague_patterns = [
+        r"\bi was thinking about\b",
+        r"\bthinking about\b",
+        r"\bmaybe\b",
+        r"\bsometime\b",
+        r"\bperhaps\b",
+        r"\bmight\b",
+        r"\bcould\b",
+        r"\bconsidering\b",
+        r"\bi wonder\b",
+        r"\bnot sure\b",
+        r"\bmaybe i should\b",
+        r"\bi may\b",
+        r"\bprobably\b",
+        r"داشتم فکر می[کک]ردم",
+        r"فکر می[کک]نم",
+        r"شاید",
+        r"یه وقت",
+        r"یه موقع",
+        r"نمیدونم",
+        r"معلوم نیست",
+        r"شاید بد نباشه",
+        r"فقط داشتم فکر می[کک]ردم",
+    ]
+
+    return any(re.search(pattern, text) for pattern in vague_patterns)
+
+
 def decide_smart_action(user_message):
     client = get_openai_client()
     current_datetime = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
     language = detect_user_language(user_message)
+    normalized_message = str(user_message or "").strip()
+
+    if message_is_vague_or_non_committal(normalized_message) and not message_has_explicit_task_intent(normalized_message):
+        return {
+            "action": "reply",
+            "title": "",
+            "description": "",
+            "priority": "medium",
+            "status": "pending",
+            "due_date": None,
+            "reply": generate_ai_reply(normalized_message, force_language=language)
+        }
+
+    if message_has_explicit_task_intent(normalized_message):
+        extracted_task = extract_task_from_message(normalized_message)
+        return {
+            "action": "task",
+            "title": extracted_task["title"],
+            "description": extracted_task["description"],
+            "priority": extracted_task["priority"],
+            "status": "pending",
+            "due_date": extracted_task["due_date"],
+            "reply": ""
+        }
 
     prompt = f"""
 You are a smart productivity assistant.
@@ -293,8 +386,9 @@ Rules:
 - Return only JSON.
 - Understand Persian and English.
 - Detect the language from the CURRENT user message only.
-- If the user is asking to remember, remind, add, do, schedule, track, plan for later, note something for later, or describes a future actionable item, choose "task".
-- If the user is asking for explanation, advice, ideas, planning help, writing help, productivity help, conversation, brainstorming, or general assistance, choose "reply".
+- Only choose "task" if the user clearly asks to remember, remind, add, create, schedule, track, or save an actionable future item.
+- If the message is vague, reflective, hypothetical, uncertain, or just thinking out loud, choose "reply".
+- Messages like "I was thinking about...", "maybe...", "sometime...", or uncertain ideas should be "reply", not "task".
 - If action is "task":
   - title must be short and clear
   - description must contain the full user intent in natural language
@@ -314,7 +408,7 @@ Rules:
 - Do not return anything except JSON.
 
 User message:
-{user_message}
+{normalized_message}
 """
 
     response = client.chat.completions.create(
@@ -335,7 +429,7 @@ User message:
             "priority": "medium",
             "status": "pending",
             "due_date": None,
-            "reply": generate_ai_reply(user_message, force_language=language)
+            "reply": generate_ai_reply(normalized_message, force_language=language)
         }
 
     action = str(parsed.get("action", "reply")).strip().lower()
@@ -351,10 +445,10 @@ User message:
 
     if action == "task":
         if not title:
-            title = user_message.strip()[:80] or "New task"
+            title = normalized_message[:80] or "New task"
 
         if not description:
-            description = user_message.strip() or "Task created from user message"
+            description = normalized_message or "Task created from user message"
 
         return {
             "action": "task",
@@ -367,7 +461,7 @@ User message:
         }
 
     if not reply:
-        reply = generate_ai_reply(user_message, force_language=language)
+        reply = generate_ai_reply(normalized_message, force_language=language)
 
     return {
         "action": "reply",
