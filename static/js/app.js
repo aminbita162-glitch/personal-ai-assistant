@@ -15,6 +15,7 @@ const signupButton = document.getElementById("signupButton");
 const loginButton = document.getElementById("loginButton");
 const logoutButton = document.getElementById("logoutButton");
 const authStatusText = document.getElementById("authStatusText");
+const togglePasswordButton = document.getElementById("togglePasswordButton");
 
 const refreshLocationButton = document.getElementById("refreshLocationButton");
 const locationStatusText = document.getElementById("locationStatusText");
@@ -129,6 +130,25 @@ function updateLoggedInUiState() {
     } else {
         updateAuthStatus("Not logged in");
     }
+}
+
+function togglePasswordVisibility() {
+    if (!passwordInput || !togglePasswordButton) {
+        return;
+    }
+
+    const isPasswordHidden = passwordInput.type === "password";
+
+    passwordInput.type = isPasswordHidden ? "text" : "password";
+    togglePasswordButton.textContent = isPasswordHidden ? "🙈" : "👁";
+    togglePasswordButton.setAttribute(
+        "aria-label",
+        isPasswordHidden ? "Hide password" : "Show password"
+    );
+    togglePasswordButton.setAttribute(
+        "title",
+        isPasswordHidden ? "Hide password" : "Show password"
+    );
 }
 
 async function authorizedFetch(url, options = {}) {
@@ -1297,6 +1317,10 @@ if (stopVoiceButton) {
         await unlockReminderSound();
         stopVoiceInput();
     });
+}
+
+if (togglePasswordButton) {
+    togglePasswordButton.addEventListener("click", togglePasswordVisibility);
 }
 
 if (signupButton) {
