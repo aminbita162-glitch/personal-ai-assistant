@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from datetime import datetime
 from openai import OpenAI
 
@@ -13,6 +14,10 @@ def get_openai_client():
     if not api_key:
         raise ValueError("OPENAI_API_KEY is not set")
     return OpenAI(api_key=api_key)
+
+
+def get_chat_model():
+    return os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1")
 
 
 def clean_ai_text(text):
@@ -67,28 +72,108 @@ def normalize_due_date(due_date):
     return None
 
 
-def generate_ai_reply(user_message):
+def detect_user_language(user_message):
+    text = str(user_message or "").strip()
+
+    if not text:
+        return "english"
+
+    persian_chars = len(re.findall(r"[\u0600-\u06FF]", text))
+    latin_chars = len(re.findall(r"[A-Za-z]", text))
+
+    if persian_chars > latin_chars:
+        return "persian"
+
+    return "english"
+
+
+def get_language_instruction(language):
+    if language == "persian":
+        return (
+            "The user's message is in Persian. "
+            "You must reply only in Persian. "
+            "Do not use English unless the user explicitly asks for English words."
+        )
+
+    return (
+        "The user's message is in English. "
+        "You must reply only in English. "
+        "Do not use Persian unless the user explicitly asks for Persian words."
+    )
+
+
+def extract_first_json_object(text):
+    if not text:
+        return None
+
+    text = str(text).strip()
+
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+
+    for index in range(start, len(text)):
+        char = text[index]
+
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            continue
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+
+            if depth == 0:
+                candidate = text[start:index + 1]
+                try:
+                    return json.loads(candidate)
+                except Exception:
+                    return None
+
+    return None
+
+
+def generate_ai_reply(user_message, force_language=None):
     client = get_openai_client()
+    language = force_language or detect_user_language(user_message)
 
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
+        model=get_chat_model(),
         messages=[
             {
                 "role": "system",
                 "content": (
-                    "You are a smart, warm, professional productivity assistant. "
-                    "You help with planning, focus, tasks, daily organization, motivation, and practical advice. "
-                    "You can understand and reply naturally in the same language as the user, including Persian and English. "
-                    "Keep answers useful, clear, and natural. "
-                    "If the user asks in Persian, reply in Persian. "
-                    "If the user asks in English, reply in English."
+                    "You are a smart, warm, highly capable productivity assistant. "
+                    "You help with planning, focus, tasks, scheduling, studying, organization, writing, and practical advice. "
+                    "Your answers should be natural, useful, concise, and professional. "
+                    f"{get_language_instruction(language)}"
                 )
             },
             {
                 "role": "user",
                 "content": user_message
             }
-        ]
+        ],
+        temperature=0.7
     )
 
     return clean_ai_text(get_response_text(response))
@@ -97,12 +182,15 @@ def generate_ai_reply(user_message):
 def extract_task_from_message(user_message):
     client = get_openai_client()
     current_datetime = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    language = detect_user_language(user_message)
 
     prompt = f"""
 You are a task extraction assistant.
 
 Current datetime (UTC):
 {current_datetime}
+
+{get_language_instruction(language)}
 
 Read the user's message and extract exactly one actionable task.
 
@@ -134,17 +222,23 @@ User message:
 """
 
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[{"role": "user", "content": prompt}]
+        model=get_chat_model(),
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1
     )
 
     raw_text = get_response_text(response)
     cleaned = clean_ai_text(raw_text)
+    parsed = extract_first_json_object(cleaned)
 
-    try:
-        parsed = json.loads(cleaned)
-    except Exception:
-        raise ValueError("AI did not return valid JSON")
+    if not parsed:
+        return {
+            "title": user_message.strip()[:80] or "New task",
+            "description": user_message.strip() or "Task created from user message",
+            "priority": "medium",
+            "status": "pending",
+            "due_date": None
+        }
 
     title = str(parsed.get("title", "")).strip()
     description = str(parsed.get("description", "")).strip()
@@ -153,10 +247,10 @@ User message:
     due_date = normalize_due_date(parsed.get("due_date"))
 
     if not title:
-        raise ValueError("AI did not return a task title")
+        title = user_message.strip()[:80] or "New task"
 
     if not description:
-        description = user_message.strip()
+        description = user_message.strip() or "Task created from user message"
 
     return {
         "title": title,
@@ -170,12 +264,15 @@ User message:
 def decide_smart_action(user_message):
     client = get_openai_client()
     current_datetime = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    language = detect_user_language(user_message)
 
     prompt = f"""
 You are a smart productivity assistant.
 
 Current datetime (UTC):
 {current_datetime}
+
+{get_language_instruction(language)}
 
 Your job is to decide whether the user's message should:
 1. create a task
@@ -195,8 +292,9 @@ Return ONLY valid JSON in this exact format:
 Rules:
 - Return only JSON.
 - Understand Persian and English.
-- If the user is asking to remember, remind, add, do, schedule, track, plan for later, or note an actionable item, choose "task".
-- If the user is asking for explanation, advice, ideas, planning help, writing help, productivity help, or conversation, choose "reply".
+- Detect the language from the CURRENT user message only.
+- If the user is asking to remember, remind, add, do, schedule, track, plan for later, note something for later, or describes a future actionable item, choose "task".
+- If the user is asking for explanation, advice, ideas, planning help, writing help, productivity help, conversation, brainstorming, or general assistance, choose "reply".
 - If action is "task":
   - title must be short and clear
   - description must contain the full user intent in natural language
@@ -220,17 +318,25 @@ User message:
 """
 
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[{"role": "user", "content": prompt}]
+        model=get_chat_model(),
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1
     )
 
     raw_text = get_response_text(response)
     cleaned = clean_ai_text(raw_text)
+    parsed = extract_first_json_object(cleaned)
 
-    try:
-        parsed = json.loads(cleaned)
-    except Exception:
-        raise ValueError("AI did not return valid JSON")
+    if not parsed:
+        return {
+            "action": "reply",
+            "title": "",
+            "description": "",
+            "priority": "medium",
+            "status": "pending",
+            "due_date": None,
+            "reply": generate_ai_reply(user_message, force_language=language)
+        }
 
     action = str(parsed.get("action", "reply")).strip().lower()
     title = str(parsed.get("title", "")).strip()
@@ -245,10 +351,10 @@ User message:
 
     if action == "task":
         if not title:
-            raise ValueError("AI decided task but did not return a title")
+            title = user_message.strip()[:80] or "New task"
 
         if not description:
-            description = user_message.strip()
+            description = user_message.strip() or "Task created from user message"
 
         return {
             "action": "task",
@@ -261,7 +367,7 @@ User message:
         }
 
     if not reply:
-        reply = generate_ai_reply(user_message)
+        reply = generate_ai_reply(user_message, force_language=language)
 
     return {
         "action": "reply",
