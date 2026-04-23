@@ -16,7 +16,21 @@ const loginButton = document.getElementById("loginButton");
 const logoutButton = document.getElementById("logoutButton");
 const authStatusText = document.getElementById("authStatusText");
 
+const refreshLocationButton = document.getElementById("refreshLocationButton");
+const locationStatusText = document.getElementById("locationStatusText");
+const locationLiveText = document.getElementById("locationLiveText");
+const locationCountryText = document.getElementById("locationCountryText");
+const locationCityText = document.getElementById("locationCityText");
+const locationLatitudeText = document.getElementById("locationLatitudeText");
+const locationLongitudeText = document.getElementById("locationLongitudeText");
+
+const startVoiceButton = document.getElementById("startVoiceButton");
+const stopVoiceButton = document.getElementById("stopVoiceButton");
+const voiceStatusText = document.getElementById("voiceStatusText");
+const voiceTranscriptBox = document.getElementById("voiceTranscriptBox");
+
 const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
+const LOCATION_STORAGE_KEY = "personal_ai_live_location_cache";
 const AUTO_REMINDER_INTERVAL_MS = 30000;
 const REMINDER_LOOKAHEAD_MS = 60 * 1000;
 const REMINDER_OVERDUE_GRACE_MS = 5 * 60 * 1000;
@@ -28,6 +42,10 @@ let shownReminderIds = new Set();
 let reminderAudioContext = null;
 let reminderSoundEnabled = false;
 let reminderSoundUnlockListenersInstalled = false;
+
+let speechRecognition = null;
+let speechRecognitionSupported = false;
+let isVoiceListening = false;
 
 function formatDateForDisplay(value) {
     if (!value) {
@@ -546,6 +564,18 @@ function ensureReminderUiStyle() {
             padding: 0;
         }
 
+        #voiceTranscriptBox {
+            min-height: 56px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 12px;
+            padding: 12px;
+            background: rgba(248, 250, 252, 0.95);
+            color: #111827;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
         @keyframes reminderPulse {
             0% {
                 transform: scale(1);
@@ -573,6 +603,268 @@ function ensureReminderUiStyle() {
         }
     `;
     document.head.appendChild(style);
+}
+
+function updateLocationStatus(text) {
+    if (locationStatusText) {
+        locationStatusText.textContent = text;
+    }
+}
+
+function updateLocationFields(locationData) {
+    if (locationLiveText) {
+        locationLiveText.textContent = locationData.live || "Unknown";
+    }
+
+    if (locationCountryText) {
+        locationCountryText.textContent = locationData.country || "Unknown";
+    }
+
+    if (locationCityText) {
+        locationCityText.textContent = locationData.city || "Unknown";
+    }
+
+    if (locationLatitudeText) {
+        locationLatitudeText.textContent =
+            typeof locationData.latitude === "number"
+                ? locationData.latitude.toFixed(6)
+                : (locationData.latitude || "—");
+    }
+
+    if (locationLongitudeText) {
+        locationLongitudeText.textContent =
+            typeof locationData.longitude === "number"
+                ? locationData.longitude.toFixed(6)
+                : (locationData.longitude || "—");
+    }
+}
+
+function saveLocationCache(locationData) {
+    try {
+        localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(locationData));
+    } catch (error) {
+        console.error("Failed to save location cache:", error);
+    }
+}
+
+function loadLocationCache() {
+    try {
+        const raw = localStorage.getItem(LOCATION_STORAGE_KEY);
+        if (!raw) {
+            return null;
+        }
+
+        return JSON.parse(raw);
+    } catch (error) {
+        console.error("Failed to load location cache:", error);
+        return null;
+    }
+}
+
+function restoreCachedLocation() {
+    const cachedLocation = loadLocationCache();
+    if (!cachedLocation) {
+        return;
+    }
+
+    updateLocationFields(cachedLocation);
+    updateLocationStatus(cachedLocation.status || "Showing last known location.");
+}
+
+async function reverseGeocode(latitude, longitude) {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`;
+
+    const response = await fetch(url, {
+        headers: {
+            "Accept": "application/json"
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error("Failed to reverse geocode location");
+    }
+
+    const data = await response.json();
+    const address = data.address || {};
+
+    const country =
+        address.country ||
+        "Unknown";
+
+    const city =
+        address.city ||
+        address.town ||
+        address.village ||
+        address.state ||
+        address.region ||
+        "Unknown";
+
+    return {
+        country,
+        city,
+        live: city !== "Unknown" && country !== "Unknown" ? `${city}, ${country}` : country
+    };
+}
+
+async function loadLiveLocation() {
+    if (!navigator.geolocation) {
+        updateLocationStatus("Geolocation is not supported on this device.");
+        return;
+    }
+
+    updateLocationStatus("Getting live location...");
+
+    navigator.geolocation.getCurrentPosition(
+        async function (position) {
+            try {
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+
+                updateLocationStatus("Resolving location details...");
+
+                const resolved = await reverseGeocode(latitude, longitude);
+
+                const locationData = {
+                    status: "Live location loaded.",
+                    live: resolved.live,
+                    country: resolved.country,
+                    city: resolved.city,
+                    latitude,
+                    longitude
+                };
+
+                updateLocationFields(locationData);
+                updateLocationStatus(locationData.status);
+                saveLocationCache(locationData);
+            } catch (error) {
+                console.error("Failed to resolve live location:", error);
+
+                const fallbackLocation = {
+                    status: "Coordinates loaded, but place name could not be resolved.",
+                    live: "Live coordinates",
+                    country: "Unknown",
+                    city: "Unknown",
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude
+                };
+
+                updateLocationFields(fallbackLocation);
+                updateLocationStatus(fallbackLocation.status);
+                saveLocationCache(fallbackLocation);
+            }
+        },
+        function (error) {
+            console.error("Failed to get live location:", error);
+
+            if (error.code === 1) {
+                updateLocationStatus("Location permission was denied.");
+            } else if (error.code === 2) {
+                updateLocationStatus("Location is unavailable right now.");
+            } else if (error.code === 3) {
+                updateLocationStatus("Location request timed out.");
+            } else {
+                updateLocationStatus("Could not get live location.");
+            }
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 0
+        }
+    );
+}
+
+function setVoiceStatus(text) {
+    if (voiceStatusText) {
+        voiceStatusText.textContent = text;
+    }
+}
+
+function setVoiceTranscript(text) {
+    if (voiceTranscriptBox) {
+        voiceTranscriptBox.textContent = text || "No voice transcript yet.";
+    }
+}
+
+function initVoiceRecognition() {
+    const SpeechRecognitionConstructor =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionConstructor) {
+        speechRecognitionSupported = false;
+        setVoiceStatus("Voice input is not supported on this device.");
+        return;
+    }
+
+    speechRecognitionSupported = true;
+    speechRecognition = new SpeechRecognitionConstructor();
+    speechRecognition.lang = "fa-IR";
+    speechRecognition.continuous = false;
+    speechRecognition.interimResults = true;
+
+    speechRecognition.onstart = function () {
+        isVoiceListening = true;
+        setVoiceStatus("Listening...");
+    };
+
+    speechRecognition.onresult = function (event) {
+        let transcript = "";
+
+        for (let i = 0; i < event.results.length; i += 1) {
+            transcript += event.results[i][0].transcript;
+        }
+
+        transcript = transcript.trim();
+
+        if (transcript) {
+            setVoiceTranscript(transcript);
+
+            if (messageInput) {
+                messageInput.value = transcript;
+            }
+        }
+    };
+
+    speechRecognition.onerror = function (event) {
+        console.error("Voice recognition error:", event.error);
+        isVoiceListening = false;
+        setVoiceStatus(`Voice error: ${event.error}`);
+    };
+
+    speechRecognition.onend = function () {
+        isVoiceListening = false;
+        setVoiceStatus("Voice input is idle.");
+    };
+}
+
+function startVoiceInput() {
+    if (!speechRecognitionSupported || !speechRecognition) {
+        setVoiceStatus("Voice input is not supported on this device.");
+        return;
+    }
+
+    if (isVoiceListening) {
+        return;
+    }
+
+    try {
+        speechRecognition.start();
+    } catch (error) {
+        console.error("Failed to start voice recognition:", error);
+        setVoiceStatus("Could not start voice input.");
+    }
+}
+
+function stopVoiceInput() {
+    if (!speechRecognition) {
+        return;
+    }
+
+    try {
+        speechRecognition.stop();
+    } catch (error) {
+        console.error("Failed to stop voice recognition:", error);
+    }
 }
 
 function startReminderAutoRefresh() {
@@ -988,6 +1280,27 @@ if (refreshRemindersButton) {
     });
 }
 
+if (refreshLocationButton) {
+    refreshLocationButton.addEventListener("click", async function () {
+        await unlockReminderSound();
+        loadLiveLocation();
+    });
+}
+
+if (startVoiceButton) {
+    startVoiceButton.addEventListener("click", async function () {
+        await unlockReminderSound();
+        startVoiceInput();
+    });
+}
+
+if (stopVoiceButton) {
+    stopVoiceButton.addEventListener("click", async function () {
+        await unlockReminderSound();
+        stopVoiceInput();
+    });
+}
+
 if (signupButton) {
     signupButton.addEventListener("click", async function () {
         await unlockReminderSound();
@@ -1027,6 +1340,8 @@ document.addEventListener("visibilitychange", function () {
 ensureReminderUiStyle();
 installReminderSoundUnlockListeners();
 updateLoggedInUiState();
+restoreCachedLocation();
+initVoiceRecognition();
 
 if (getAuthToken()) {
     startReminderAutoRefresh();
