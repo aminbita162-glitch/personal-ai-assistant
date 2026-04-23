@@ -42,7 +42,35 @@
         <div id="authStatusText" style="margin-top:16px;">Not logged in</div>
     </div>
 
-    <label>Your message</label>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;">
+        <h3>Live Location</h3>
+        <button id="refreshLocationButton" type="button">Refresh Location</button>
+    </div>
+
+    <div class="task-item">
+        <strong>Status:</strong> <span id="locationStatusText">Location not loaded yet.</span><br>
+        <strong>Live:</strong> <span id="locationLiveText">Unknown</span><br>
+        <strong>Country:</strong> <span id="locationCountryText">Unknown</span><br>
+        <strong>City / Region:</strong> <span id="locationCityText">Unknown</span><br>
+        <strong>Latitude:</strong> <span id="locationLatitudeText">—</span><br>
+        <strong>Longitude:</strong> <span id="locationLongitudeText">—</span>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;">
+        <h3>Voice Input</h3>
+    </div>
+
+    <div class="task-item">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <button id="startVoiceButton" type="button">Start Voice</button>
+            <button id="stopVoiceButton" type="button">Stop Voice</button>
+        </div>
+
+        <div id="voiceStatusText" style="margin-top:16px;">Voice input is idle.</div>
+        <div id="voiceTranscriptBox" style="margin-top:16px;">No voice transcript yet.</div>
+    </div>
+
+    <label for="messageInput">Your message</label>
     <textarea id="messageInput"></textarea>
 
     <label for="dueDateInput" style="margin-top: 16px;">Due date</label>
@@ -89,7 +117,7 @@
         <strong>App Name:</strong> Personal AI Assistant<br>
         <strong>Version:</strong> 1.0.0<br>
         <strong>Author:</strong> Amin Azimi<br>
-        <strong>Description:</strong> A smart productivity assistant for tasks, appointments, reminders, and AI-powered help.
+        <strong>Description:</strong> A smart productivity assistant for tasks, appointments, reminders, live location, voice input, and AI-powered help.
     </div>
 </div>
 
