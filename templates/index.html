@@ -16,6 +16,34 @@
     <link rel="apple-touch-icon-precomposed" href="{{ url_for('static', filename='CF271111-3A51-4CE1-AFB2-1589062C9903.png') }}?v=4">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        .password-field-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .password-toggle-button {
+            position: absolute;
+            top: 50%;
+            right: 14px;
+            transform: translateY(-50%);
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+            padding: 4px;
+            color: #0f172a;
+            z-index: 2;
+        }
+
+        .password-field-wrapper input {
+            padding-right: 52px;
+            box-sizing: border-box;
+            width: 100%;
+        }
+    </style>
 </head>
 <body>
 <div class="container">
@@ -31,7 +59,10 @@
         <input id="emailInput" type="email" placeholder="Enter your email">
 
         <label for="passwordInput" style="margin-top: 16px;">Password</label>
-        <input id="passwordInput" type="password" placeholder="Enter your password">
+        <div class="password-field-wrapper">
+            <input id="passwordInput" type="password" placeholder="Enter your password">
+            <button id="togglePasswordButton" type="button" class="password-toggle-button" aria-label="Show password" title="Show password">👁</button>
+        </div>
 
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;">
             <button id="signupButton" type="button">Sign Up</button>
