@@ -18,6 +18,8 @@ const authStatusText = document.getElementById("authStatusText");
 
 const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
 const AUTO_REMINDER_INTERVAL_MS = 30000;
+const REMINDER_LOOKAHEAD_MS = 60 * 1000;
+const REMINDER_OVERDUE_GRACE_MS = 5 * 60 * 1000;
 
 let reminderAutoRefreshIntervalId = null;
 let isLoadingReminders = false;
@@ -369,6 +371,39 @@ async function showNotification(message) {
     }, 5000);
 }
 
+function parseReminderDate(value) {
+    if (!value) {
+        return null;
+    }
+
+    const parsedDate = new Date(value);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+        return null;
+    }
+
+    return parsedDate;
+}
+
+function isReminderTriggerable(dateValue) {
+    const dueDate = parseReminderDate(dateValue);
+
+    if (!dueDate) {
+        return false;
+    }
+
+    const now = Date.now();
+    const dueTime = dueDate.getTime();
+    const differenceMs = dueTime - now;
+
+    return differenceMs <= REMINDER_LOOKAHEAD_MS && differenceMs >= -REMINDER_OVERDUE_GRACE_MS;
+}
+
+function getReminderNotificationMessage(item, typeLabel) {
+    const title = item && item.title ? String(item.title) : "Untitled";
+    return `${typeLabel}: ${title}`;
+}
+
 function renderReminders(tasks, appointments) {
     if (!remindersList) {
         return;
@@ -378,11 +413,15 @@ function renderReminders(tasks, appointments) {
 
     if (Array.isArray(tasks)) {
         tasks.forEach(task => {
-            const reminderKey = `task-${task.id}`;
+            const reminderKey = `task-${task.id}-${task.due_date || "no-date"}`;
             let reminderClassName = "task-item";
+            const shouldTriggerReminder =
+                task &&
+                task.status !== "done" &&
+                isReminderTriggerable(task.due_date);
 
-            if (!shownReminderIds.has(reminderKey)) {
-                showNotification(task.title);
+            if (shouldTriggerReminder && !shownReminderIds.has(reminderKey)) {
+                showNotification(getReminderNotificationMessage(task, "Task reminder"));
                 shownReminderIds.add(reminderKey);
                 reminderClassName = "task-item reminder-highlight";
             }
@@ -400,11 +439,15 @@ function renderReminders(tasks, appointments) {
 
     if (Array.isArray(appointments)) {
         appointments.forEach(appointment => {
-            const reminderKey = `appointment-${appointment.id}`;
+            const reminderKey = `appointment-${appointment.id}-${appointment.appointment_time || "no-time"}`;
             let reminderClassName = "task-item";
+            const shouldTriggerReminder =
+                appointment &&
+                (appointment.status || "scheduled") !== "done" &&
+                isReminderTriggerable(appointment.appointment_time);
 
-            if (!shownReminderIds.has(reminderKey)) {
-                showNotification(appointment.title);
+            if (shouldTriggerReminder && !shownReminderIds.has(reminderKey)) {
+                showNotification(getReminderNotificationMessage(appointment, "Appointment reminder"));
                 shownReminderIds.add(reminderKey);
                 reminderClassName = "task-item reminder-highlight";
             }
@@ -623,6 +666,10 @@ async function loadReminders(options = {}) {
         const tasks = data.tasks || [];
         const appointments = data.appointments || [];
         const nextSignature = buildReminderSignature(tasks, appointments);
+
+        if (nextSignature === lastReminderSignature && silent) {
+            return;
+        }
 
         lastReminderSignature = nextSignature;
         renderReminders(tasks, appointments);
