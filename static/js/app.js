@@ -30,6 +30,16 @@ const stopVoiceButton = document.getElementById("stopVoiceButton");
 const voiceStatusText = document.getElementById("voiceStatusText");
 const voiceTranscriptBox = document.getElementById("voiceTranscriptBox");
 
+const refreshExchangeRatesButton = document.getElementById("refreshExchangeRatesButton");
+const exchangeRatesStatusText = document.getElementById("exchangeRatesStatusText");
+const exchangeRatesBaseText = document.getElementById("exchangeRatesBaseText");
+const exchangeRateEurText = document.getElementById("exchangeRateEurText");
+const exchangeRateGbpText = document.getElementById("exchangeRateGbpText");
+const exchangeRateCadText = document.getElementById("exchangeRateCadText");
+const exchangeRateTryText = document.getElementById("exchangeRateTryText");
+const exchangeRateAedText = document.getElementById("exchangeRateAedText");
+const exchangeRatesUpdatedText = document.getElementById("exchangeRatesUpdatedText");
+
 const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
 const LOCATION_STORAGE_KEY = "personal_ai_live_location_cache";
 const AUTO_REMINDER_INTERVAL_MS = 30000;
@@ -1217,6 +1227,37 @@ async function loadReminders(options = {}) {
     }
 }
 
+async function loadExchangeRates() {
+    if (!exchangeRatesStatusText) return;
+
+    exchangeRatesStatusText.textContent = "Loading exchange rates...";
+
+    try {
+        const res = await fetch("/exchange-rates");
+        const data = await res.json();
+
+        if (data.status !== "success") {
+            exchangeRatesStatusText.textContent = "Failed to load exchange rates";
+            return;
+        }
+
+        const rates = data.rates || {};
+
+        exchangeRatesBaseText.textContent = data.base || "USD";
+        exchangeRateEurText.textContent = rates.EUR || "—";
+        exchangeRateGbpText.textContent = rates.GBP || "—";
+        exchangeRateCadText.textContent = rates.CAD || "—";
+        exchangeRateTryText.textContent = rates.TRY || "—";
+        exchangeRateAedText.textContent = rates.AED || "—";
+        exchangeRatesUpdatedText.textContent = data.updated || "—";
+
+        exchangeRatesStatusText.textContent = "Exchange rates updated";
+    } catch (error) {
+        console.error("Exchange rates error:", error);
+        exchangeRatesStatusText.textContent = "Error loading exchange rates";
+    }
+}
+
 async function loadAppInfo() {
     try {
         const res = await fetch("/app-info");
@@ -1533,6 +1574,10 @@ if (refreshLocationButton) {
     });
 }
 
+if (refreshExchangeRatesButton) {
+    refreshExchangeRatesButton.addEventListener("click", loadExchangeRates);
+}
+
 if (startVoiceButton) {
     startVoiceButton.addEventListener("click", async function () {
         await unlockReminderSound();
@@ -1602,3 +1647,4 @@ loadTasks();
 loadAppointments();
 loadReminders();
 loadAppInfo();
+loadExchangeRates();   // ← Exchange rates on page load
