@@ -33,8 +33,8 @@ const voiceTranscriptBox = document.getElementById("voiceTranscriptBox");
 const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
 const LOCATION_STORAGE_KEY = "personal_ai_live_location_cache";
 const AUTO_REMINDER_INTERVAL_MS = 30000;
-const REMINDER_LOOKAHEAD_MS = 60 * 1000;
-const REMINDER_OVERDUE_GRACE_MS = 5 * 60 * 1000;
+const REMINDER_LOOKAHEAD_MS = 5 * 60 * 1000;
+const REMINDER_OVERDUE_GRACE_MS = 30 * 60 * 1000;
 
 let reminderAutoRefreshIntervalId = null;
 let isLoadingReminders = false;
