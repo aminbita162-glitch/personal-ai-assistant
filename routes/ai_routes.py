@@ -169,6 +169,48 @@ def init_ai_routes(app, get_connection):
                 "message": str(e)
             }), 500
 
+    @ai_routes.route("/transcribe-voice", methods=["POST"])
+    def transcribe_voice():
+        try:
+            from services.ai_service import get_openai_client
+
+            current_user, error_response, status_code = get_current_user(get_connection)
+            if error_response:
+                return jsonify(error_response), status_code
+
+            if "audio" not in request.files:
+                return jsonify({
+                    "status": "error",
+                    "message": "Audio file is required"
+                }), 400
+
+            audio_file = request.files["audio"]
+
+            if not audio_file or not audio_file.filename:
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid audio file"
+                }), 400
+
+            client = get_openai_client()
+
+            transcription = client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe",
+                file=audio_file
+            )
+
+            transcript_text = getattr(transcription, "text", "")
+
+            return jsonify({
+                "status": "success",
+                "text": transcript_text
+            })
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": str(e)
+            }), 500
+
     @ai_routes.route("/ai-to-task", methods=["POST"])
     def ai_to_task():
         try:
