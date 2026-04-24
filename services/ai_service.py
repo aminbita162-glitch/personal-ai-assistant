@@ -17,7 +17,7 @@ def get_openai_client():
 
 
 def get_chat_model():
-    return os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1")
+    return os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 
 
 def clean_ai_text(text):
@@ -28,13 +28,6 @@ def clean_ai_text(text):
     cleaned = cleaned.replace("\\n", "\n")
     cleaned = cleaned.replace("\\t", "\t")
     cleaned = cleaned.replace("\\r", "")
-    cleaned = cleaned.replace("\\u2014", "—")
-    cleaned = cleaned.replace("\\u2013", "–")
-    cleaned = cleaned.replace("\\u2018", "‘")
-    cleaned = cleaned.replace("\\u2019", "’")
-    cleaned = cleaned.replace("\\u201c", "“")
-    cleaned = cleaned.replace("\\u201d", "”")
-
     return cleaned.strip()
 
 
@@ -72,33 +65,13 @@ def normalize_due_date(due_date):
     return None
 
 
-def detect_user_language(user_message):
-    text = str(user_message or "").strip()
-
-    if not text:
-        return "english"
-
-    persian_chars = len(re.findall(r"[\u0600-\u06FF]", text))
-    latin_chars = len(re.findall(r"[A-Za-z]", text))
-
-    if persian_chars > latin_chars:
-        return "persian"
-
-    return "english"
-
-
-def get_language_instruction(language):
-    if language == "persian":
-        return (
-            "The user's message is in Persian. "
-            "You must reply only in Persian. "
-            "Do not use English unless the user explicitly asks for English words."
-        )
-
+# 🔥 NEW — REAL MULTILINGUAL INSTRUCTION
+def get_language_instruction():
     return (
-        "The user's message is in English. "
-        "You must reply only in English. "
-        "Do not use Persian unless the user explicitly asks for Persian words."
+        "You must ALWAYS detect the user's language from their message and reply in the SAME language. "
+        "Support ALL languages (Persian, English, Arabic, Spanish, French, German, etc). "
+        "Do not translate unless the user asks. "
+        "Match tone, style, and formality naturally."
     )
 
 
@@ -152,9 +125,9 @@ def extract_first_json_object(text):
     return None
 
 
-def generate_ai_reply(user_message, force_language=None):
+# 🔥 IMPROVED CHATGPT-STYLE RESPONSE
+def generate_ai_reply(user_message):
     client = get_openai_client()
-    language = force_language or detect_user_language(user_message)
 
     response = client.chat.completions.create(
         model=get_chat_model(),
@@ -162,10 +135,11 @@ def generate_ai_reply(user_message, force_language=None):
             {
                 "role": "system",
                 "content": (
-                    "You are a smart, warm, highly capable productivity assistant. "
-                    "You help with planning, focus, tasks, scheduling, studying, organization, writing, and practical advice. "
-                    "Your answers should be natural, useful, concise, and professional. "
-                    f"{get_language_instruction(language)}"
+                    "You are a highly intelligent, friendly, and professional AI assistant. "
+                    "You help with thinking, planning, problem-solving, productivity, learning, and real-life decisions. "
+                    "Your answers must be clear, helpful, structured when needed, and natural like ChatGPT. "
+                    "Avoid robotic answers. Be human-like and practical. "
+                    f"{get_language_instruction()}"
                 )
             },
             {
@@ -179,45 +153,39 @@ def generate_ai_reply(user_message, force_language=None):
     return clean_ai_text(get_response_text(response))
 
 
+# 🔥 IMPROVED TASK EXTRACTION
 def extract_task_from_message(user_message):
     client = get_openai_client()
     current_datetime = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
-    language = detect_user_language(user_message)
 
     prompt = f"""
-You are a task extraction assistant.
+You are a task extraction AI.
 
 Current datetime (UTC):
 {current_datetime}
 
-{get_language_instruction(language)}
+{get_language_instruction()}
 
-Read the user's message and extract exactly one actionable task.
+Extract ONE actionable task from the user's message.
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON:
 {{
-  "title": "task title",
-  "description": "full user intent as natural sentence",
+  "title": "",
+  "description": "",
   "priority": "low or medium or high",
   "status": "pending",
-  "due_date": "ISO datetime string or null"
+  "due_date": "ISO datetime or null"
 }}
 
 Rules:
-- Return only JSON.
-- Title must be short, clear, and useful.
-- Description must contain the full original user intent in natural language.
-- Description must not be empty.
-- status must always be "pending".
-- priority must be exactly one of: low, medium, high.
-- If the user includes a date or time, convert it to an ISO datetime string relative to current datetime.
-- If there is no date/time, return null for due_date.
-- Understand Persian and English.
-- Do not add markdown.
-- Do not add explanation.
-- Do not return anything except JSON.
+- Only JSON
+- Title short
+- Description complete
+- Detect language automatically
+- Convert dates to ISO
+- If no date → null
 
-User message:
+User:
 {user_message}
 """
 
@@ -228,198 +196,74 @@ User message:
     )
 
     raw_text = get_response_text(response)
-    cleaned = clean_ai_text(raw_text)
-    parsed = extract_first_json_object(cleaned)
+    parsed = extract_first_json_object(clean_ai_text(raw_text))
 
     if not parsed:
         return {
-            "title": user_message.strip()[:80] or "New task",
-            "description": user_message.strip() or "Task created from user message",
+            "title": user_message[:80] or "New task",
+            "description": user_message,
             "priority": "medium",
             "status": "pending",
             "due_date": None
         }
 
-    title = str(parsed.get("title", "")).strip()
-    description = str(parsed.get("description", "")).strip()
-    priority = normalize_priority(parsed.get("priority", "medium"))
-    status = normalize_status(parsed.get("status", "pending"))
-    due_date = normalize_due_date(parsed.get("due_date"))
-
-    if not title:
-        title = user_message.strip()[:80] or "New task"
-
-    if not description:
-        description = user_message.strip() or "Task created from user message"
-
     return {
-        "title": title,
-        "description": description,
-        "priority": priority,
-        "status": status,
-        "due_date": due_date
+        "title": parsed.get("title") or user_message[:80],
+        "description": parsed.get("description") or user_message,
+        "priority": normalize_priority(parsed.get("priority")),
+        "status": "pending",
+        "due_date": normalize_due_date(parsed.get("due_date"))
     }
 
 
-def message_has_explicit_task_intent(user_message):
-    text = str(user_message or "").strip().lower()
-
-    explicit_task_patterns = [
-        r"\bremind me\b",
-        r"\bremember to\b",
-        r"\badd a task\b",
-        r"\bcreate a task\b",
-        r"\bschedule\b",
-        r"\bset a reminder\b",
-        r"\bmake a reminder\b",
-        r"\bi need to\b",
-        r"\bi have to\b",
-        r"\btodo\b",
-        r"\bto-do\b",
-        r"\bcall .* tomorrow\b",
-        r"\bcall .* at \d",
-        r"\bmeeting .* tomorrow\b",
-        r"\bappointment .* tomorrow\b",
-        r"یادم بنداز",
-        r"یادم بندار",
-        r"یادآوری کن",
-        r"یادآوری",
-        r"برام یادداشت کن",
-        r"تسک بساز",
-        r"کار بساز",
-        r"ثبت کن",
-        r"برنامه بذار",
-        r"نوبت .* دارم",
-        r"فردا .* برم",
-        r"فردا .* زنگ بزنم",
-        r"ساعت \d",
-        r"ساعت [۰-۹]",
-    ]
-
-    return any(re.search(pattern, text) for pattern in explicit_task_patterns)
-
-
-def message_is_vague_or_non_committal(user_message):
-    text = str(user_message or "").strip().lower()
-
-    vague_patterns = [
-        r"\bi was thinking about\b",
-        r"\bthinking about\b",
-        r"\bmaybe\b",
-        r"\bsometime\b",
-        r"\bperhaps\b",
-        r"\bmight\b",
-        r"\bcould\b",
-        r"\bconsidering\b",
-        r"\bi wonder\b",
-        r"\bnot sure\b",
-        r"\bmaybe i should\b",
-        r"\bi may\b",
-        r"\bprobably\b",
-        r"داشتم فکر می[کک]ردم",
-        r"فکر می[کک]نم",
-        r"شاید",
-        r"یه وقت",
-        r"یه موقع",
-        r"نمیدونم",
-        r"معلوم نیست",
-        r"شاید بد نباشه",
-        r"فقط داشتم فکر می[کک]ردم",
-    ]
-
-    return any(re.search(pattern, text) for pattern in vague_patterns)
-
-
+# 🔥 MAIN DECISION ENGINE (SMART LIKE CHATGPT)
 def decide_smart_action(user_message):
     client = get_openai_client()
     current_datetime = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
-    language = detect_user_language(user_message)
-    normalized_message = str(user_message or "").strip()
-
-    if message_is_vague_or_non_committal(normalized_message) and not message_has_explicit_task_intent(normalized_message):
-        return {
-            "action": "reply",
-            "title": "",
-            "description": "",
-            "priority": "medium",
-            "status": "pending",
-            "due_date": None,
-            "reply": generate_ai_reply(normalized_message, force_language=language)
-        }
-
-    if message_has_explicit_task_intent(normalized_message):
-        extracted_task = extract_task_from_message(normalized_message)
-        return {
-            "action": "task",
-            "title": extracted_task["title"],
-            "description": extracted_task["description"],
-            "priority": extracted_task["priority"],
-            "status": "pending",
-            "due_date": extracted_task["due_date"],
-            "reply": ""
-        }
 
     prompt = f"""
-You are a smart productivity assistant.
+You are an intelligent assistant.
 
-Current datetime (UTC):
+Current datetime:
 {current_datetime}
 
-{get_language_instruction(language)}
+{get_language_instruction()}
 
-Your job is to decide whether the user's message should:
-1. create a task
-2. or receive a normal assistant reply
+Decide:
+- "task" → if user wants to remember something
+- "reply" → normal conversation
 
-Return ONLY valid JSON in this exact format:
+Return ONLY JSON:
 {{
   "action": "task" or "reply",
   "title": "",
   "description": "",
   "priority": "low or medium or high",
   "status": "pending",
-  "due_date": "ISO datetime string or null",
+  "due_date": "ISO datetime or null",
   "reply": ""
 }}
 
 Rules:
-- Return only JSON.
-- Understand Persian and English.
-- Detect the language from the CURRENT user message only.
-- Only choose "task" if the user clearly asks to remember, remind, add, create, schedule, track, or save an actionable future item.
-- If the message is vague, reflective, hypothetical, uncertain, or just thinking out loud, choose "reply".
-- Messages like "I was thinking about...", "maybe...", "sometime...", or uncertain ideas should be "reply", not "task".
-- If action is "task":
-  - title must be short and clear
-  - description must contain the full user intent in natural language
-  - priority must be low, medium, or high
-  - status must be pending
-  - due_date should be ISO datetime string if a date/time exists, otherwise null
-  - reply must be empty
-- If action is "reply":
-  - title must be empty
-  - description must be empty
-  - priority must be medium
-  - status must be pending
-  - due_date must be null
-  - reply must contain a natural helpful response in the same language as the user
-- Do not add markdown.
-- Do not add explanation outside JSON.
-- Do not return anything except JSON.
+- Only JSON
+- Be accurate
+- Do NOT over-create tasks
+- If unsure → reply
+- Reply must be natural and helpful
 
-User message:
-{normalized_message}
+User:
+{user_message}
 """
 
     response = client.chat.completions.create(
         model=get_chat_model(),
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.1
+        temperature=0.2
     )
 
-    raw_text = get_response_text(response)
-    cleaned = clean_ai_text(raw_text)
-    parsed = extract_first_json_object(cleaned)
+    parsed = extract_first_json_object(
+        clean_ai_text(get_response_text(response))
+    )
 
     if not parsed:
         return {
@@ -429,39 +273,16 @@ User message:
             "priority": "medium",
             "status": "pending",
             "due_date": None,
-            "reply": generate_ai_reply(normalized_message, force_language=language)
+            "reply": generate_ai_reply(user_message)
         }
 
-    action = str(parsed.get("action", "reply")).strip().lower()
-    title = str(parsed.get("title", "")).strip()
-    description = str(parsed.get("description", "")).strip()
-    priority = normalize_priority(parsed.get("priority", "medium"))
-    status = normalize_status(parsed.get("status", "pending"))
-    due_date = normalize_due_date(parsed.get("due_date"))
-    reply = str(parsed.get("reply", "")).strip()
-
-    if action not in ["task", "reply"]:
-        action = "reply"
-
-    if action == "task":
-        if not title:
-            title = normalized_message[:80] or "New task"
-
-        if not description:
-            description = normalized_message or "Task created from user message"
-
+    if parsed.get("action") == "task":
+        task = extract_task_from_message(user_message)
         return {
             "action": "task",
-            "title": title,
-            "description": description,
-            "priority": priority,
-            "status": "pending",
-            "due_date": due_date,
+            **task,
             "reply": ""
         }
-
-    if not reply:
-        reply = generate_ai_reply(normalized_message, force_language=language)
 
     return {
         "action": "reply",
@@ -470,5 +291,5 @@ User message:
         "priority": "medium",
         "status": "pending",
         "due_date": None,
-        "reply": reply
+        "reply": parsed.get("reply") or generate_ai_reply(user_message)
     }
