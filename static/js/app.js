@@ -44,9 +44,14 @@ let reminderAudioContext = null;
 let reminderSoundEnabled = false;
 let reminderSoundUnlockListenersInstalled = false;
 
-let speechRecognition = null;
-let speechRecognitionSupported = false;
-let isVoiceListening = false;
+let mediaRecorder = null;
+let mediaStream = null;
+let recordedAudioChunks = [];
+let isVoiceRecording = false;
+let voiceRecordingSupported = false;
+let lastRecordedAudioBlob = null;
+let lastRecordedAudioUrl = "";
+let lastRecordedAudioMimeType = "";
 
 function formatDateForDisplay(value) {
     if (!value) {
@@ -596,6 +601,11 @@ function ensureReminderUiStyle() {
             word-break: break-word;
         }
 
+        .voice-audio-player {
+            width: 100%;
+            margin-top: 12px;
+        }
+
         @keyframes reminderPulse {
             0% {
                 transform: scale(1);
@@ -798,90 +808,240 @@ function setVoiceStatus(text) {
     }
 }
 
+function clearLastRecordedAudioUrl() {
+    if (lastRecordedAudioUrl) {
+        try {
+            URL.revokeObjectURL(lastRecordedAudioUrl);
+        } catch (error) {
+            console.error("Failed to revoke audio URL:", error);
+        }
+        lastRecordedAudioUrl = "";
+    }
+}
+
+function setVoiceTranscriptContent(content) {
+    if (!voiceTranscriptBox) {
+        return;
+    }
+
+    voiceTranscriptBox.innerHTML = "";
+    if (typeof content === "string") {
+        voiceTranscriptBox.textContent = content;
+        return;
+    }
+
+    if (content) {
+        voiceTranscriptBox.appendChild(content);
+    }
+}
+
 function setVoiceTranscript(text) {
-    if (voiceTranscriptBox) {
-        voiceTranscriptBox.textContent = text || "No voice transcript yet.";
-    }
+    setVoiceTranscriptContent(text || "No voice recording yet.");
 }
 
-function initVoiceRecognition() {
-    const SpeechRecognitionConstructor =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
+function supportsRealVoiceRecording() {
+    return (
+        typeof window !== "undefined" &&
+        !!navigator.mediaDevices &&
+        typeof navigator.mediaDevices.getUserMedia === "function" &&
+        typeof window.MediaRecorder !== "undefined"
+    );
+}
 
-    if (!SpeechRecognitionConstructor) {
-        speechRecognitionSupported = false;
-        setVoiceStatus("Voice input is not supported on this device.");
-        return;
-    }
+function getPreferredAudioMimeType() {
+    const mimeTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/mpeg"
+    ];
 
-    speechRecognitionSupported = true;
-    speechRecognition = new SpeechRecognitionConstructor();
-    speechRecognition.lang = "fa-IR";
-    speechRecognition.continuous = false;
-    speechRecognition.interimResults = true;
-
-    speechRecognition.onstart = function () {
-        isVoiceListening = true;
-        setVoiceStatus("Listening...");
-    };
-
-    speechRecognition.onresult = function (event) {
-        let transcript = "";
-
-        for (let i = 0; i < event.results.length; i += 1) {
-            transcript += event.results[i][0].transcript;
-        }
-
-        transcript = transcript.trim();
-
-        if (transcript) {
-            setVoiceTranscript(transcript);
-
-            if (messageInput) {
-                messageInput.value = transcript;
+    for (let i = 0; i < mimeTypes.length; i += 1) {
+        const mimeType = mimeTypes[i];
+        try {
+            if (MediaRecorder.isTypeSupported(mimeType)) {
+                return mimeType;
             }
+        } catch (error) {
+            console.error("Failed to test mime type:", error);
         }
-    };
+    }
 
-    speechRecognition.onerror = function (event) {
-        console.error("Voice recognition error:", event.error);
-        isVoiceListening = false;
-        setVoiceStatus(`Voice error: ${event.error}`);
-    };
-
-    speechRecognition.onend = function () {
-        isVoiceListening = false;
-        setVoiceStatus("Voice input is idle.");
-    };
+    return "";
 }
 
-function startVoiceInput() {
-    if (!speechRecognitionSupported || !speechRecognition) {
-        setVoiceStatus("Voice input is not supported on this device.");
+function stopVoiceStreamTracks() {
+    if (!mediaStream) {
         return;
     }
 
-    if (isVoiceListening) {
+    const tracks = mediaStream.getTracks();
+    tracks.forEach(track => {
+        try {
+            track.stop();
+        } catch (error) {
+            console.error("Failed to stop media track:", error);
+        }
+    });
+
+    mediaStream = null;
+}
+
+function renderRecordedAudioPreview() {
+    if (!lastRecordedAudioBlob || !lastRecordedAudioUrl) {
+        setVoiceTranscript("No voice recording yet.");
+        return;
+    }
+
+    const wrapper = document.createElement("div");
+
+    const text = document.createElement("div");
+    text.textContent = `Voice recorded successfully. Size: ${Math.round(lastRecordedAudioBlob.size / 1024)} KB`;
+    wrapper.appendChild(text);
+
+    const audio = document.createElement("audio");
+    audio.className = "voice-audio-player";
+    audio.controls = true;
+    audio.src = lastRecordedAudioUrl;
+    wrapper.appendChild(audio);
+
+    setVoiceTranscriptContent(wrapper);
+}
+
+function updateVoiceButtonsState() {
+    if (startVoiceButton) {
+        startVoiceButton.disabled = isVoiceRecording;
+    }
+
+    if (stopVoiceButton) {
+        stopVoiceButton.disabled = !isVoiceRecording;
+    }
+}
+
+function initVoiceRecording() {
+    voiceRecordingSupported = supportsRealVoiceRecording();
+
+    if (!voiceRecordingSupported) {
+        setVoiceStatus("Microphone recording is not supported on this device.");
+        setVoiceTranscript("No voice recording yet.");
+        updateVoiceButtonsState();
+        return;
+    }
+
+    setVoiceStatus("Microphone is ready.");
+    setVoiceTranscript("No voice recording yet.");
+    updateVoiceButtonsState();
+}
+
+async function startVoiceInput() {
+    if (!voiceRecordingSupported) {
+        setVoiceStatus("Microphone recording is not supported on this device.");
+        return;
+    }
+
+    if (isVoiceRecording) {
         return;
     }
 
     try {
-        speechRecognition.start();
+        clearLastRecordedAudioUrl();
+        lastRecordedAudioBlob = null;
+        lastRecordedAudioMimeType = "";
+        recordedAudioChunks = [];
+
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: true
+        });
+
+        const preferredMimeType = getPreferredAudioMimeType();
+        const mediaRecorderOptions = preferredMimeType ? { mimeType: preferredMimeType } : {};
+
+        mediaRecorder = new MediaRecorder(mediaStream, mediaRecorderOptions);
+        lastRecordedAudioMimeType = preferredMimeType || mediaRecorder.mimeType || "audio/webm";
+
+        mediaRecorder.onstart = function () {
+            isVoiceRecording = true;
+            setVoiceStatus("Recording voice...");
+            setVoiceTranscript("Recording in progress...");
+            updateVoiceButtonsState();
+        };
+
+        mediaRecorder.ondataavailable = function (event) {
+            if (event.data && event.data.size > 0) {
+                recordedAudioChunks.push(event.data);
+            }
+        };
+
+        mediaRecorder.onerror = function (event) {
+            console.error("MediaRecorder error:", event);
+            isVoiceRecording = false;
+            setVoiceStatus("Voice recording failed.");
+            updateVoiceButtonsState();
+            stopVoiceStreamTracks();
+        };
+
+        mediaRecorder.onstop = function () {
+            isVoiceRecording = false;
+
+            try {
+                const audioBlob = new Blob(recordedAudioChunks, {
+                    type: lastRecordedAudioMimeType || "audio/webm"
+                });
+
+                if (audioBlob.size > 0) {
+                    lastRecordedAudioBlob = audioBlob;
+                    lastRecordedAudioUrl = URL.createObjectURL(audioBlob);
+                    renderRecordedAudioPreview();
+                    setVoiceStatus("Voice recording completed.");
+                } else {
+                    lastRecordedAudioBlob = null;
+                    setVoiceTranscript("No audio was captured.");
+                    setVoiceStatus("Voice recording completed, but no audio was captured.");
+                }
+            } catch (error) {
+                console.error("Failed to finalize voice recording:", error);
+                setVoiceStatus("Could not process recorded audio.");
+                setVoiceTranscript("Recorded audio could not be processed.");
+            }
+
+            recordedAudioChunks = [];
+            updateVoiceButtonsState();
+            stopVoiceStreamTracks();
+        };
+
+        mediaRecorder.start();
     } catch (error) {
-        console.error("Failed to start voice recognition:", error);
-        setVoiceStatus("Could not start voice input.");
+        console.error("Failed to start microphone recording:", error);
+
+        isVoiceRecording = false;
+        updateVoiceButtonsState();
+        stopVoiceStreamTracks();
+
+        if (error && error.name === "NotAllowedError") {
+            setVoiceStatus("Microphone permission was denied.");
+        } else if (error && error.name === "NotFoundError") {
+            setVoiceStatus("No microphone was found on this device.");
+        } else if (error && error.name === "NotReadableError") {
+            setVoiceStatus("Microphone is already in use or not readable.");
+        } else {
+            setVoiceStatus("Could not start microphone recording.");
+        }
+
+        setVoiceTranscript("No voice recording yet.");
     }
 }
 
 function stopVoiceInput() {
-    if (!speechRecognition) {
+    if (!mediaRecorder || !isVoiceRecording) {
         return;
     }
 
     try {
-        speechRecognition.stop();
+        mediaRecorder.stop();
+        setVoiceStatus("Stopping voice recording...");
     } catch (error) {
-        console.error("Failed to stop voice recognition:", error);
+        console.error("Failed to stop microphone recording:", error);
+        setVoiceStatus("Could not stop voice recording.");
     }
 }
 
@@ -1363,7 +1523,8 @@ ensureReminderUiStyle();
 installReminderSoundUnlockListeners();
 updateLoggedInUiState();
 restoreCachedLocation();
-initVoiceRecognition();
+initVoiceRecording();
+updateVoiceButtonsState();
 
 if (getAuthToken()) {
     startReminderAutoRefresh();
