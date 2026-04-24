@@ -101,6 +101,17 @@
         <strong>USD → TRY:</strong> <span id="exchangeRateTryText">—</span><br>
         <strong>USD → AED:</strong> <span id="exchangeRateAedText">—</span><br>
         <strong>Updated:</strong> <span id="exchangeRatesUpdatedText">—</span>
+
+        <div style="margin-top:16px;">
+            <label for="customCurrencyInput">Find currency</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+                <input id="customCurrencyInput" type="text" placeholder="Country or code, e.g. Japan or JPY">
+                <button id="findCurrencyButton" type="button">Find</button>
+            </div>
+            <div style="margin-top:12px;">
+                <strong>Result:</strong> <span id="customCurrencyResultText">—</span>
+            </div>
+        </div>
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;">
