@@ -40,6 +40,10 @@ const exchangeRateTryText = document.getElementById("exchangeRateTryText");
 const exchangeRateAedText = document.getElementById("exchangeRateAedText");
 const exchangeRatesUpdatedText = document.getElementById("exchangeRatesUpdatedText");
 
+const customCurrencyInput = document.getElementById("customCurrencyInput");
+const findCurrencyButton = document.getElementById("findCurrencyButton");
+const customCurrencyResultText = document.getElementById("customCurrencyResultText");
+
 const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
 const LOCATION_STORAGE_KEY = "personal_ai_live_location_cache";
 const AUTO_REMINDER_INTERVAL_MS = 30000;
@@ -1647,4 +1651,4 @@ loadTasks();
 loadAppointments();
 loadReminders();
 loadAppInfo();
-loadExchangeRates();   // ← Exchange rates on page load
+loadExchangeRates();
