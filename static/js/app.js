@@ -1100,7 +1100,11 @@ async function sendAudioToServer(audioBlob) {
         }
 
         setVoiceTranscript(transcribedText);
-        setVoiceStatus("Voice converted to text");
+        setVoiceStatus("Voice converted to text. Sending...");
+
+        await sendMessage(true);
+
+        setVoiceStatus("Voice converted and sent");
     } catch (error) {
         console.error("Failed to convert voice to text:", error);
         setVoiceStatus("Voice conversion failed");
@@ -1383,7 +1387,7 @@ function renderTaskResult(taskData, actionLabel) {
     }, null, 2);
 }
 
-async function sendMessage() {
+async function sendMessage(isAuto = false) {
     const message = messageInput ? messageInput.value.trim() : "";
     const dueDateValue = dueDateInput ? dueDateInput.value : "";
 
@@ -1394,8 +1398,10 @@ async function sendMessage() {
 
     statusText.textContent = "Sending...";
 
-    await unlockReminderSound();
-    await ensureBrowserNotificationPermission();
+    if (!isAuto) {
+        await unlockReminderSound();
+        await ensureBrowserNotificationPermission();
+    }
 
     const res = await authorizedFetch(`/smart-ai-browser?message=${encodeURIComponent(message)}`);
     const data = await res.json();
