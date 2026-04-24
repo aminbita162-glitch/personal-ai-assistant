@@ -1,4 +1,6 @@
 from flask import Blueprint, jsonify, request
+import tempfile
+import os
 
 from services.auth_service import get_current_user
 from services.task_service import build_task_payload, serialize_task
@@ -171,6 +173,8 @@ def init_ai_routes(app, get_connection):
 
     @ai_routes.route("/transcribe-voice", methods=["POST"])
     def transcribe_voice():
+        temp_path = None
+
         try:
             from services.ai_service import get_openai_client
 
@@ -192,12 +196,17 @@ def init_ai_routes(app, get_connection):
                     "message": "Invalid audio file"
                 }), 400
 
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio_file:
+                audio_file.save(temp_audio_file.name)
+                temp_path = temp_audio_file.name
+
             client = get_openai_client()
 
-            transcription = client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe",
-                file=audio_file
-            )
+            with open(temp_path, "rb") as audio:
+                transcription = client.audio.transcriptions.create(
+                    model="gpt-4o-mini-transcribe",
+                    file=audio
+                )
 
             transcript_text = getattr(transcription, "text", "")
 
@@ -205,11 +214,21 @@ def init_ai_routes(app, get_connection):
                 "status": "success",
                 "text": transcript_text
             })
-        except Exception as e:
+
+        except Exception as error:
+            print("VOICE TRANSCRIPTION ERROR:", str(error))
+
             return jsonify({
                 "status": "error",
-                "message": str(e)
+                "message": "Voice processing failed"
             }), 500
+
+        finally:
+            if temp_path:
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
 
     @ai_routes.route("/ai-to-task", methods=["POST"])
     def ai_to_task():
