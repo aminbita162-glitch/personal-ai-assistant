@@ -36,6 +36,7 @@ def add_cors_headers(response):
 @app.route("/signup", methods=["OPTIONS"])
 @app.route("/login", methods=["OPTIONS"])
 @app.route("/app-info", methods=["OPTIONS"])
+@app.route("/exchange-rates", methods=["OPTIONS"])
 def options_handler(task_id=None, appointment_id=None):
     return ("", 204)
 
@@ -67,6 +68,37 @@ def app_info():
         "author": "Amin Azimi",
         "description": "A smart productivity assistant for tasks, reminders, appointments, and AI-powered help."
     })
+
+
+@app.route("/exchange-rates")
+def exchange_rates():
+    try:
+        import requests
+
+        response = requests.get(
+            "https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,CAD,AUD,JPY",
+            timeout=10
+        )
+
+        if not response.ok:
+            return jsonify({
+                "status": "error",
+                "message": "Could not load exchange rates"
+            }), 500
+
+        data = response.json()
+
+        return jsonify({
+            "status": "success",
+            "base": data.get("base"),
+            "date": data.get("date"),
+            "rates": data.get("rates", {})
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
 
 @app.route("/db-check")
