@@ -432,12 +432,17 @@ function isReminderTriggerable(dateValue) {
     const dueDate = parseReminderDate(dateValue);
 
     if (!dueDate) {
+        console.log("❌ invalid date:", dateValue);
         return false;
     }
 
     const now = Date.now();
     const dueTime = dueDate.getTime();
     const differenceMs = dueTime - now;
+
+    console.log("⏱ now:", new Date(now).toLocaleTimeString());
+    console.log("⏰ due:", new Date(dueTime).toLocaleTimeString());
+    console.log("📉 diff(ms):", differenceMs);
 
     return differenceMs <= REMINDER_LOOKAHEAD_MS && differenceMs >= -REMINDER_OVERDUE_GRACE_MS;
 }
