@@ -993,6 +993,8 @@ async function startVoiceInput() {
                     lastRecordedAudioUrl = URL.createObjectURL(audioBlob);
                     renderRecordedAudioPreview();
                     setVoiceStatus("Voice recording completed.");
+
+                    sendAudioToServer(audioBlob);
                 } else {
                     lastRecordedAudioBlob = null;
                     setVoiceTranscript("No audio was captured.");
@@ -1042,6 +1044,61 @@ function stopVoiceInput() {
     } catch (error) {
         console.error("Failed to stop microphone recording:", error);
         setVoiceStatus("Could not stop voice recording.");
+    }
+}
+
+async function sendAudioToServer(audioBlob) {
+    try {
+        if (!audioBlob || audioBlob.size === 0) {
+            setVoiceStatus("No audio captured");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("audio", audioBlob, "voice.webm");
+
+        setVoiceStatus("Processing voice...");
+
+        const response = await authorizedFetch("/transcribe-voice", {
+            method: "POST",
+            body: formData
+        });
+
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            setVoiceStatus("Invalid server response");
+            return;
+        }
+
+        if (!response.ok) {
+            setVoiceStatus("Server error during voice processing");
+            return;
+        }
+
+        if (!data || data.status !== "success") {
+            setVoiceStatus((data && data.message) || "Voice processing failed");
+            return;
+        }
+
+        const transcribedText = String(data.text || "").trim();
+
+        if (!transcribedText) {
+            setVoiceStatus("No speech detected");
+            return;
+        }
+
+        if (messageInput) {
+            messageInput.value = transcribedText;
+            messageInput.focus();
+        }
+
+        setVoiceTranscript(transcribedText);
+        setVoiceStatus("Voice converted to text");
+    } catch (error) {
+        console.error("Failed to convert voice to text:", error);
+        setVoiceStatus("Voice conversion failed");
     }
 }
 
