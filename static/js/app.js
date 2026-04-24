@@ -1262,6 +1262,58 @@ async function loadExchangeRates() {
     }
 }
 
+function findCustomCurrency() {
+    const input = (customCurrencyInput.value || "").trim().toUpperCase();
+
+    if (!input) {
+        customCurrencyResultText.textContent = "Please enter a currency";
+        return;
+    }
+
+    customCurrencyResultText.textContent = "Loading...";
+
+    fetch("/exchange-rates")
+        .then(response => response.json())
+        .then(data => {
+            if (data.status !== "success") {
+                customCurrencyResultText.textContent = "Error loading rates";
+                return;
+            }
+
+            const rates = data.rates || {};
+
+            if (rates[input]) {
+                customCurrencyResultText.textContent = `USD → ${input}: ${rates[input]}`;
+                return;
+            }
+
+            const countryMap = {
+                JAPAN: "JPY",
+                IRAN: "IRR",
+                TURKEY: "TRY",
+                UK: "GBP",
+                ENGLAND: "GBP",
+                EUROPE: "EUR",
+                CANADA: "CAD",
+                UAE: "AED",
+                EMIRATES: "AED"
+            };
+
+            const currencyCode = countryMap[input];
+
+            if (currencyCode && rates[currencyCode]) {
+                customCurrencyResultText.textContent = `USD → ${currencyCode}: ${rates[currencyCode]}`;
+                return;
+            }
+
+            customCurrencyResultText.textContent = "Currency not found";
+        })
+        .catch(error => {
+            console.error("Custom currency error:", error);
+            customCurrencyResultText.textContent = "Error loading currency";
+        });
+}
+
 async function loadAppInfo() {
     try {
         const res = await fetch("/app-info");
@@ -1580,6 +1632,10 @@ if (refreshLocationButton) {
 
 if (refreshExchangeRatesButton) {
     refreshExchangeRatesButton.addEventListener("click", loadExchangeRates);
+}
+
+if (findCurrencyButton) {
+    findCurrencyButton.addEventListener("click", findCustomCurrency);
 }
 
 if (startVoiceButton) {
