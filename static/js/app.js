@@ -51,6 +51,7 @@ const LOCATION_STORAGE_KEY = "personal_ai_live_location_cache";
 const AUTO_REMINDER_INTERVAL_MS = 30000;
 const REMINDER_LOOKAHEAD_MS = 5 * 60 * 1000;
 const REMINDER_OVERDUE_GRACE_MS = 30 * 60 * 1000;
+const NOTIFICATION_COOLDOWN_MS = 60000;
 
 let reminderAutoRefreshIntervalId = null;
 let isLoadingReminders = false;
@@ -59,6 +60,7 @@ let shownReminderIds = new Set();
 let reminderAudioContext = null;
 let reminderSoundEnabled = false;
 let reminderSoundUnlockListenersInstalled = false;
+let lastNotificationTimeMap = {};
 
 let mediaRecorder = null;
 let mediaStream = null;
@@ -394,7 +396,17 @@ async function playReminderSound() {
     }
 }
 
-async function showNotification(message) {
+async function showNotification(message, key = "") {
+    const now = Date.now();
+
+    if (key) {
+        const lastTime = lastNotificationTimeMap[key] || 0;
+        if (now - lastTime < NOTIFICATION_COOLDOWN_MS) {
+            return;
+        }
+        lastNotificationTimeMap[key] = now;
+    }
+
     await playReminderSound();
     showBrowserNotification(message);
 
@@ -485,7 +497,10 @@ function renderReminders(tasks, appointments) {
                 isReminderTriggerable(task.due_date);
 
             if (shouldTriggerReminder && !shownReminderIds.has(reminderKey)) {
-                showNotification(getReminderNotificationMessage(task, "Task reminder"));
+                showNotification(
+                    getReminderNotificationMessage(task, "Task reminder"),
+                    reminderKey
+                );
                 shownReminderIds.add(reminderKey);
                 reminderClassName = "task-item reminder-highlight";
             }
@@ -511,7 +526,10 @@ function renderReminders(tasks, appointments) {
                 isReminderTriggerable(appointment.appointment_time);
 
             if (shouldTriggerReminder && !shownReminderIds.has(reminderKey)) {
-                showNotification(getReminderNotificationMessage(appointment, "Appointment reminder"));
+                showNotification(
+                    getReminderNotificationMessage(appointment, "Appointment reminder"),
+                    reminderKey
+                );
                 shownReminderIds.add(reminderKey);
                 reminderClassName = "task-item reminder-highlight";
             }
@@ -1424,6 +1442,7 @@ async function logout() {
     }
 
     clearAuthToken();
+    lastNotificationTimeMap = {};
     stopReminderAutoRefresh();
     lastReminderSignature = "";
     shownReminderIds = new Set();
