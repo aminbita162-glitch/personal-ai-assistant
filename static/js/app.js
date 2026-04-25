@@ -1737,3 +1737,30 @@ setInterval(updateDateTime, 1000);
 
 // run once immediately
 updateDateTime();
+
+function updateSmartGreeting() {
+    const greetingText = document.getElementById("smartGreetingText");
+    const greetingSubText = document.getElementById("smartGreetingSubText");
+
+    if (!greetingText || !greetingSubText) {
+        return;
+    }
+
+    const hour = new Date().getHours();
+
+    if (hour >= 5 && hour < 12) {
+        greetingText.textContent = "Good morning ☀️";
+        greetingSubText.textContent = "Welcome back. Hope you have a productive morning.";
+    } else if (hour >= 12 && hour < 17) {
+        greetingText.textContent = "Good afternoon 🌤";
+        greetingSubText.textContent = "Welcome back. Your assistant is ready to help.";
+    } else if (hour >= 17 && hour < 21) {
+        greetingText.textContent = "Good evening 🌆";
+        greetingSubText.textContent = "Welcome back. Let’s organize the rest of your day.";
+    } else {
+        greetingText.textContent = "Good night 🌙";
+        greetingSubText.textContent = "Welcome back. I’m here whenever you need me.";
+    }
+}
+
+updateSmartGreeting();
