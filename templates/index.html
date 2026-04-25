@@ -92,10 +92,39 @@
             box-sizing: border-box;
             width: 100%;
         }
+
+        /* تغییرات جدید */
+        .alina-dance {
+            animation: alinaDance 0.6s infinite;
+        }
+
+        @keyframes alinaDance {
+            0% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(-10deg) scale(1.05); }
+            50% { transform: rotate(10deg) scale(1.1); }
+            75% { transform: rotate(-10deg) scale(1.05); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
     </style>
 </head>
 <body>
 <div class="container">
+
+    <!-- LILA COMPANY -->
+    <div style="text-align:center; font-size:22px; font-weight:bold; margin-bottom:10px;">
+        LILA COMPANY
+    </div>
+
+    <!-- ALINA Widget -->
+    <div id="alinaWidget" style="text-align:center; margin-bottom:20px;">
+        <div style="font-weight:bold; font-size:18px;">ALINA</div>
+        <img 
+            id="alinaAvatar"
+            src="https://cdn-icons-png.flaticon.com/512/4140/4140048.png"
+            style="width:100px; cursor:pointer;"
+        />
+    </div>
+
     <div class="top-bar">
         <div>
             <h1>Personal AI Assistant</h1>
