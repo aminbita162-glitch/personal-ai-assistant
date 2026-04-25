@@ -1708,3 +1708,32 @@ loadAppointments();
 loadReminders();
 loadAppInfo();
 loadExchangeRates();
+
+function updateDateTime() {
+    const now = new Date();
+
+    const time = now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    });
+
+    const date = now.toLocaleDateString([], {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+    });
+
+    const timeEl = document.getElementById("digitalTimeText");
+    const dateEl = document.getElementById("digitalDateText");
+
+    if (timeEl) timeEl.textContent = time;
+    if (dateEl) dateEl.textContent = date;
+}
+
+// start clock
+setInterval(updateDateTime, 1000);
+
+// run once immediately
+updateDateTime();
