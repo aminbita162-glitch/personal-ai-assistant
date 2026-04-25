@@ -15,6 +15,8 @@ const signupButton = document.getElementById("signupButton");
 const loginButton = document.getElementById("loginButton");
 const logoutButton = document.getElementById("logoutButton");
 const authStatusText = document.getElementById("authStatusText");
+const nameInput = document.getElementById("nameInput");
+
 const togglePasswordButton = document.getElementById("togglePasswordButton");
 
 const refreshLocationButton = document.getElementById("refreshLocationButton");
@@ -1338,6 +1340,7 @@ async function loadAppInfo() {
 }
 
 async function signup() {
+    const name = nameInput ? nameInput.value.trim() : "";
     const email = emailInput ? emailInput.value.trim() : "";
     const password = passwordInput ? passwordInput.value.trim() : "";
 
@@ -1352,7 +1355,7 @@ async function signup() {
         const res = await fetch("/signup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ name, email, password })
         });
 
         const data = await res.json();
