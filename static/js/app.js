@@ -863,6 +863,7 @@ async function loadWeather() {
 
         if (!cachedLocation || !cachedLocation.latitude || !cachedLocation.longitude) {
             weatherStatusText.textContent = "Please load location first.";
+            updateAlinaMood();
             return;
         }
 
