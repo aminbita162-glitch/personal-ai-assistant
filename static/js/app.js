@@ -910,7 +910,10 @@ async function loadWeather() {
         }
 
         weatherStatusText.textContent = "Weather updated";
-        updateAlinaMood(); // Update Alina mood after weather loads
+
+        window.setTimeout(function () {
+            updateAlinaMood();
+        }, 300);
     } catch (error) {
         console.error("Weather error:", error);
         weatherStatusText.textContent = "Error loading weather";
@@ -1885,8 +1888,14 @@ loadAppointments();
 loadReminders();
 loadAppInfo();
 loadExchangeRates();
-loadWeather();
-updateAlinaMood();   // Initial mood update
+updateAlinaMood();
+
+loadWeather().then(function () {
+    updateAlinaMood();
+});
+
+window.setTimeout(updateAlinaMood, 1000);
+window.setTimeout(updateAlinaMood, 3000);
 
 function updateDateTime() {
     const now = new Date();
