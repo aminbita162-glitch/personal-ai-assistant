@@ -1794,3 +1794,12 @@ function updateSmartGreeting() {
 }
 
 updateSmartGreeting();
+
+// ALINA click animation
+const alinaAvatar = document.getElementById("alinaAvatar");
+
+if (alinaAvatar) {
+    alinaAvatar.addEventListener("click", function () {
+        alinaAvatar.classList.toggle("alina-dance");
+    });
+}
