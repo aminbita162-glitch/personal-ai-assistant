@@ -46,6 +46,15 @@ const customCurrencyInput = document.getElementById("customCurrencyInput");
 const findCurrencyButton = document.getElementById("findCurrencyButton");
 const customCurrencyResultText = document.getElementById("customCurrencyResultText");
 
+// === Weather Elements ===
+const refreshWeatherButton = document.getElementById("refreshWeatherButton");
+const weatherStatusText = document.getElementById("weatherStatusText");
+const weatherCityText = document.getElementById("weatherCityText");
+const weatherTempText = document.getElementById("weatherTempText");
+const weatherConditionText = document.getElementById("weatherConditionText");
+const weatherHumidityText = document.getElementById("weatherHumidityText");
+const weatherWindText = document.getElementById("weatherWindText");
+
 const AUTH_TOKEN_STORAGE_KEY = "personal_ai_auth_token";
 const LOCATION_STORAGE_KEY = "personal_ai_live_location_cache";
 const AUTO_REMINDER_INTERVAL_MS = 30000;
@@ -840,6 +849,99 @@ async function loadLiveLocation() {
         }
     );
 }
+
+// ==================== WEATHER FUNCTIONS ====================
+async function loadWeather() {
+    if (!weatherStatusText) {
+        return;
+    }
+
+    weatherStatusText.textContent = "Loading weather...";
+
+    try {
+        const cachedLocation = loadLocationCache();
+
+        if (!cachedLocation || !cachedLocation.latitude || !cachedLocation.longitude) {
+            weatherStatusText.textContent = "Please load location first.";
+            return;
+        }
+
+        const latitude = cachedLocation.latitude;
+        const longitude = cachedLocation.longitude;
+
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m`;
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error("Failed to load weather");
+        }
+
+        const data = await response.json();
+        const current = data.current || {};
+
+        if (weatherCityText) {
+            weatherCityText.textContent = cachedLocation.live || cachedLocation.city || "Current location";
+        }
+
+        if (weatherTempText) {
+            weatherTempText.textContent =
+                typeof current.temperature_2m === "number"
+                    ? `${current.temperature_2m} °C`
+                    : "—";
+        }
+
+        if (weatherConditionText) {
+            weatherConditionText.textContent = getWeatherConditionText(current.weather_code);
+        }
+
+        if (weatherHumidityText) {
+            weatherHumidityText.textContent =
+                typeof current.relative_humidity_2m === "number"
+                    ? `${current.relative_humidity_2m}%`
+                    : "—";
+        }
+
+        if (weatherWindText) {
+            weatherWindText.textContent =
+                typeof current.wind_speed_10m === "number"
+                    ? `${current.wind_speed_10m} km/h`
+                    : "—";
+        }
+
+        weatherStatusText.textContent = "Weather updated";
+    } catch (error) {
+        console.error("Weather error:", error);
+        weatherStatusText.textContent = "Error loading weather";
+    }
+}
+
+function getWeatherConditionText(code) {
+    const weatherCodeMap = {
+        0: "Clear sky",
+        1: "Mainly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Fog",
+        48: "Depositing rime fog",
+        51: "Light drizzle",
+        53: "Moderate drizzle",
+        55: "Dense drizzle",
+        61: "Slight rain",
+        63: "Moderate rain",
+        65: "Heavy rain",
+        71: "Slight snow",
+        73: "Moderate snow",
+        75: "Heavy snow",
+        80: "Slight rain showers",
+        81: "Moderate rain showers",
+        82: "Violent rain showers",
+        95: "Thunderstorm"
+    };
+
+    return weatherCodeMap[code] || "Unknown";
+}
+// ==================== END WEATHER FUNCTIONS ====================
 
 function setVoiceStatus(text) {
     if (voiceStatusText) {
@@ -1664,6 +1766,13 @@ if (refreshExchangeRatesButton) {
     refreshExchangeRatesButton.addEventListener("click", loadExchangeRates);
 }
 
+if (refreshWeatherButton) {
+    refreshWeatherButton.addEventListener("click", async function () {
+        await unlockReminderSound();
+        loadWeather();
+    });
+}
+
 if (findCurrencyButton) {
     findCurrencyButton.addEventListener("click", findCustomCurrency);
 }
@@ -1738,6 +1847,7 @@ loadAppointments();
 loadReminders();
 loadAppInfo();
 loadExchangeRates();
+loadWeather();
 
 function updateDateTime() {
     const now = new Date();
