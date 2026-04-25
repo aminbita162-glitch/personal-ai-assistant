@@ -18,6 +18,35 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     <style>
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .datetime-widget {
+            text-align: right;
+            background: #f8fafc;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 14px;
+            padding: 10px 14px;
+            min-width: 130px;
+            color: #0f172a;
+        }
+
+        .datetime-time {
+            font-size: 22px;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .datetime-date {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
         .password-field-wrapper {
             position: relative;
             width: 100%;
@@ -47,8 +76,17 @@
 </head>
 <body>
 <div class="container">
-    <h1>Personal AI Assistant</h1>
-    <p>Talk to your assistant and let it reply or create a task automatically.</p>
+    <div class="top-bar">
+        <div>
+            <h1>Personal AI Assistant</h1>
+            <p>Talk to your assistant and let it reply or create a task automatically.</p>
+        </div>
+
+        <div class="datetime-widget">
+            <div id="digitalTimeText" class="datetime-time">--:--</div>
+            <div id="digitalDateText" class="datetime-date">Loading date...</div>
+        </div>
+    </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;">
         <h3>Account</h3>
