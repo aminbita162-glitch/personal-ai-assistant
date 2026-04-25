@@ -1509,6 +1509,14 @@ function renderTaskResult(taskData, actionLabel) {
 async function sendMessage(isAuto = false) {
     const message = messageInput ? messageInput.value.trim() : "";
     const dueDateValue = dueDateInput ? dueDateInput.value : "";
+    const dueTimeInput = document.getElementById("dueTimeInput");
+    const dueTimeValue = dueTimeInput ? dueTimeInput.value : "";
+
+    let finalDueDate = dueDateValue;
+
+    if (dueDateValue && dueTimeValue) {
+        finalDueDate = `${dueDateValue}T${dueTimeValue}:00`;
+    }
 
     if (!message) {
         statusText.textContent = "Please enter a message";
@@ -1534,8 +1542,8 @@ async function sendMessage(isAuto = false) {
     if (data.action === "task" && data.task) {
         let finalTask = data.task;
 
-        if (dueDateValue) {
-            const updateData = await updateTaskDueDate(data.task.id, dueDateValue);
+        if (finalDueDate) {
+            const updateData = await updateTaskDueDate(data.task.id, finalDueDate);
             if (updateData.status === "success" && updateData.task) {
                 finalTask = updateData.task;
             }
@@ -1558,7 +1566,7 @@ async function sendMessage(isAuto = false) {
         return;
     }
 
-    if (!dueDateValue) {
+    if (!finalDueDate) {
         if (resultBox) {
             resultBox.textContent = JSON.stringify(data, null, 2);
         }
@@ -1570,7 +1578,7 @@ async function sendMessage(isAuto = false) {
         return;
     }
 
-    const manualTaskData = await createTaskFromMessage(message, dueDateValue);
+    const manualTaskData = await createTaskFromMessage(message, finalDueDate);
 
     if (resultBox) {
         resultBox.textContent = JSON.stringify(manualTaskData, null, 2);
