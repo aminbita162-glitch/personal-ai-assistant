@@ -910,6 +910,7 @@ async function loadWeather() {
         }
 
         weatherStatusText.textContent = "Weather updated";
+        updateAlinaMood(); // Update Alina mood after weather loads
     } catch (error) {
         console.error("Weather error:", error);
         weatherStatusText.textContent = "Error loading weather";
@@ -942,6 +943,42 @@ function getWeatherConditionText(code) {
     return weatherCodeMap[code] || "Unknown";
 }
 // ==================== END WEATHER FUNCTIONS ====================
+
+// ==================== ALINA MOOD ====================
+function updateAlinaMood() {
+    const moodEl = document.getElementById("alinaMoodText");
+    if (!moodEl) return;
+
+    let moodText = "";
+
+    // ⏰ TIME BASED MOOD
+    const hour = new Date().getHours();
+
+    if (hour >= 5 && hour < 12) {
+        moodText = "Good morning ☀️";
+    } else if (hour >= 12 && hour < 17) {
+        moodText = "Active & ready 💪";
+    } else if (hour >= 17 && hour < 21) {
+        moodText = "Relax mode 🌆";
+    } else {
+        moodText = "Sleepy 😴";
+    }
+
+    // 🌦 WEATHER BASED MOOD (override if available)
+    const conditionTextEl = document.getElementById("weatherConditionText");
+    const condition = conditionTextEl ? conditionTextEl.textContent.toLowerCase() : "";
+
+    if (condition.includes("rain")) {
+        moodText = "Rainy mood 🌧";
+    } else if (condition.includes("cloud")) {
+        moodText = "Calm & cloudy ☁️";
+    } else if (condition.includes("clear") || condition.includes("sun")) {
+        moodText = "Happy & sunny 😎";
+    }
+
+    moodEl.textContent = moodText;
+}
+// ==================== END ALINA MOOD ====================
 
 function setVoiceStatus(text) {
     if (voiceStatusText) {
@@ -1769,7 +1806,8 @@ if (refreshExchangeRatesButton) {
 if (refreshWeatherButton) {
     refreshWeatherButton.addEventListener("click", async function () {
         await unlockReminderSound();
-        loadWeather();
+        await loadWeather();
+        updateAlinaMood();
     });
 }
 
@@ -1848,6 +1886,7 @@ loadReminders();
 loadAppInfo();
 loadExchangeRates();
 loadWeather();
+updateAlinaMood();   // Initial mood update
 
 function updateDateTime() {
     const now = new Date();
