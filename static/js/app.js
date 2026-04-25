@@ -1795,11 +1795,38 @@ function updateSmartGreeting() {
 
 updateSmartGreeting();
 
-// ALINA click animation
+// ALINA Advanced Animation (Left + Right Images)
 const alinaAvatar = document.getElementById("alinaAvatar");
+const alinaWrapper = document.getElementById("alinaWrapper");
 
-if (alinaAvatar) {
+if (alinaAvatar && alinaWrapper) {
     alinaAvatar.addEventListener("click", function () {
         alinaAvatar.classList.toggle("alina-dance");
+        alinaWrapper.classList.toggle("alina-active");
+
+        const alinaLeft = document.getElementById("alinaLeft");
+        const alinaRight = document.getElementById("alinaRight");
+
+        if (alinaWrapper.classList.contains("alina-active")) {
+            if (alinaLeft) {
+                alinaLeft.style.left = "10px";
+                alinaLeft.style.opacity = "1";
+            }
+
+            if (alinaRight) {
+                alinaRight.style.left = "190px";
+                alinaRight.style.opacity = "1";
+            }
+        } else {
+            if (alinaLeft) {
+                alinaLeft.style.left = "100px";
+                alinaLeft.style.opacity = "0";
+            }
+
+            if (alinaRight) {
+                alinaRight.style.left = "100px";
+                alinaRight.style.opacity = "0";
+            }
+        }
     });
 }
