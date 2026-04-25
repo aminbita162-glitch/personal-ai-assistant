@@ -118,11 +118,26 @@
     <!-- ALINA Widget -->
     <div id="alinaWidget" style="text-align:center; margin-bottom:20px;">
         <div style="font-weight:bold; font-size:18px;">ALINA</div>
-        <img 
-            id="alinaAvatar"
-            src="{{ url_for('static', filename='IMG_9142.jpeg') }}?v=1"
-            style="width:100px; height:100px; object-fit:cover; border-radius:50%; cursor:pointer;"
-        />
+
+        <div id="alinaWrapper" style="position:relative; display:inline-block; width:280px; height:110px;">
+            <img 
+                id="alinaLeft"
+                src="{{ url_for('static', filename='left.png') }}?v=1"
+                style="width:80px; height:80px; object-fit:cover; border-radius:50%; position:absolute; left:100px; top:10px; opacity:0; transition:0.4s; z-index:1;"
+            />
+
+            <img 
+                id="alinaAvatar"
+                src="{{ url_for('static', filename='IMG_9142.jpeg') }}?v=1"
+                style="width:100px; height:100px; object-fit:cover; border-radius:50%; cursor:pointer; position:absolute; left:90px; top:0; z-index:3;"
+            />
+
+            <img 
+                id="alinaRight"
+                src="{{ url_for('static', filename='right.png') }}?v=1"
+                style="width:80px; height:80px; object-fit:cover; border-radius:50%; position:absolute; left:100px; top:10px; opacity:0; transition:0.4s; z-index:1;"
+            />
+        </div>
     </div>
 
     <div class="top-bar">
