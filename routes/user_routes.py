@@ -13,11 +13,17 @@ def ensure_users_schema(get_connection):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
+            name TEXT,
             email TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             auth_token TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+    """)
+
+    cur.execute("""
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS name TEXT;
     """)
 
     cur.execute("""
@@ -62,6 +68,7 @@ def init_user_routes(app, get_connection):
                     "message": "Request body must be JSON"
                 }), 400
 
+            name = str(data.get("name", "")).strip()
             email = str(data.get("email", "")).strip().lower()
             password = str(data.get("password", "")).strip()
 
@@ -97,10 +104,10 @@ def init_user_routes(app, get_connection):
             auth_token = generate_auth_token()
 
             cur.execute("""
-                INSERT INTO users (email, password, auth_token)
-                VALUES (%s, %s, %s)
-                RETURNING id, email, auth_token, created_at;
-            """, (email, hashed_password, auth_token))
+                INSERT INTO users (name, email, password, auth_token)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id, name, email, auth_token, created_at;
+            """, (name, email, hashed_password, auth_token))
 
             user = cur.fetchone()
 
@@ -113,6 +120,7 @@ def init_user_routes(app, get_connection):
                 "message": "Signup successful",
                 "user": {
                     "id": user["id"],
+                    "name": user["name"],
                     "email": user["email"],
                     "auth_token": user["auth_token"],
                     "created_at": user["created_at"].isoformat() if user["created_at"] else None
@@ -151,7 +159,7 @@ def init_user_routes(app, get_connection):
             cur = conn.cursor(cursor_factory=RealDictCursor)
 
             cur.execute("""
-                SELECT id, email, password, auth_token, created_at
+                SELECT id, name, email, password, auth_token, created_at
                 FROM users
                 WHERE email = %s;
             """, (email,))
@@ -183,7 +191,7 @@ def init_user_routes(app, get_connection):
                 UPDATE users
                 SET auth_token = %s
                 WHERE id = %s
-                RETURNING id, email, auth_token, created_at;
+                RETURNING id, name, email, auth_token, created_at;
             """, (auth_token, user["id"]))
 
             updated_user = cur.fetchone()
@@ -197,6 +205,7 @@ def init_user_routes(app, get_connection):
                 "message": "Login successful",
                 "user": {
                     "id": updated_user["id"],
+                    "name": updated_user["name"],
                     "email": updated_user["email"],
                     "auth_token": updated_user["auth_token"],
                     "created_at": updated_user["created_at"].isoformat() if updated_user["created_at"] else None
@@ -226,7 +235,7 @@ def init_user_routes(app, get_connection):
             cur = conn.cursor(cursor_factory=RealDictCursor)
 
             cur.execute("""
-                SELECT id, email, auth_token, created_at
+                SELECT id, name, email, auth_token, created_at
                 FROM users
                 WHERE auth_token = %s;
             """, (token,))
@@ -245,6 +254,7 @@ def init_user_routes(app, get_connection):
                 "status": "success",
                 "user": {
                     "id": user["id"],
+                    "name": user["name"],
                     "email": user["email"],
                     "auth_token": user["auth_token"],
                     "created_at": user["created_at"].isoformat() if user["created_at"] else None
@@ -277,7 +287,7 @@ def init_user_routes(app, get_connection):
                 UPDATE users
                 SET auth_token = NULL
                 WHERE auth_token = %s
-                RETURNING id, email, created_at;
+                RETURNING id, name, email, created_at;
             """, (token,))
 
             user = cur.fetchone()
